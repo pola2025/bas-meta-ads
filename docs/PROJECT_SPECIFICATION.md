@@ -1,9 +1,9 @@
-# Meta 광고 자동 분석 플랫폼 설계 기획서 v1.2
+# Meta 광고 자동 분석 플랫폼 설계 기획서 v1.3
 
 **프로젝트명**: BAS Meta Ads Analytics Platform
-**버전**: 1.2.2 (코드 동기화 완료 - 완전 준비)
+**버전**: 1.3.0 (Phase 3 시각화 및 리포팅 가이드 추가)
 **작성일**: 2025-11-18
-**최종 수정**: 2025-11-19 (코드 동기화 완료)
+**최종 수정**: 2025-11-19 (Phase 3 상세 계획 추가)
 
 ---
 
@@ -889,9 +889,329 @@ $$ LANGUAGE plpgsql;
 
 ---
 
-### Phase 3: 멀티 클라이언트 (2주) - 2026년 1월 6일까지
+### Phase 3: 자동 리포팅 및 고도화 (3주) - 2026년 1월 27일까지
 
-*(v1.0과 동일)*
+**Week 6** (12/24 ~ 12/30): Railway 배포 및 자동화
+- [ ] GitHub 리포지토리 생성 및 코드 푸시
+- [ ] Railway 프로젝트 생성
+- [ ] Worker 배포 (Start Command: `npm run worker`)
+- [ ] 환경 변수 설정 (Supabase, Redis, Meta API, Telegram)
+- [ ] Cron Job 추가: 매주 월요일 09:00 KST (UTC 00:00)
+- [ ] 배포 확인 및 로그 모니터링
+
+**Week 7** (12/31 ~ 1/6): 시각화 및 분석 고도화
+- [ ] 기간별 분석 전략 구현 (주간/월간/분기)
+- [ ] KPI Scorecard 개선 (증감률 + 절대값 + 이전 기간 값)
+- [ ] Daily Trend Line (이번 주 vs 지난주 겹쳐서 표시)
+- [ ] 요일별 히트맵 (CTR/CPL 효율 비교)
+- [ ] Efficiency Grade 변동 추적 (S/A/B/C 등급 변화)
+- [ ] Budget Pacing (월 예산 대비 소진율)
+- [ ] Cumulative Spend/Leads (누적 그래프)
+- [ ] Platform/Device Pie Chart
+
+**Week 8** (1/7 ~ 1/13): 텔레그램 자동 리포팅
+- [ ] 리포팅 전용 Python 스크립트 작성 (`lib/reporter.py`)
+- [ ] 분석 로직 구현 (Rule-based Insight Generation)
+- [ ] 차트 이미지 생성 (Plotly + Kaleido)
+- [ ] 텔레그램 메시지 포맷 구현
+- [ ] Railway Cron 설정:
+  - 주간 리포트: 매주 화요일 09:00 (UTC 00:00)
+  - 월간 리포트: 매월 2일 09:00 (UTC 00:00)
+- [ ] Streamlit 관리자 설정 페이지 (리포트 설정)
+- [ ] 테스트 및 검증
+
+**Deliverable**:
+- ✅ Railway 자동 스케줄링 (매주 월요일 데이터 수집)
+- ✅ 기간별 비교 분석 (WoW, MoM, QoQ)
+- ✅ 자동 텔레그램 리포트 (주간/월간)
+- ✅ 차트 이미지 자동 생성
+- ✅ AI 기반 인사이트 생성 (Rule-based)
+
+---
+
+### Phase 4: 멀티 클라이언트 및 확장 (2주) - 2026년 2월 10일까지
+
+**Week 9** (1/14 ~ 1/20):
+- [ ] 2-3개 추가 클라이언트 등록
+- [ ] 멀티 클라이언트 기능 검증
+- [ ] 클라이언트별 독립 대시보드
+- [ ] 권한 관리 (RLS)
+
+**Week 10** (1/21 ~ 1/27):
+- [ ] PDF 리포트 생성 (jsPDF)
+- [ ] 광고별 상세 페이지
+- [ ] 반응형 디자인 (모바일)
+- [ ] 최종 통합 테스트
+
+**Deliverable**:
+- ✅ 멀티 클라이언트 지원
+- ✅ PDF 다운로드 기능
+- ✅ 모바일 최적화
+- ✅ 프로덕션 환경 완성
+
+---
+
+## 9.5. 시각화 및 분석 리포팅 구현 가이드 (Phase 3 상세)
+
+### 9.5.1 기간별 분석 전략 (Analysis Strategy)
+
+데이터를 누적하며 비교 분석할 때, 각 주기(Weekly, Monthly, Quarterly)마다 확인해야 할 **핵심 질문(Key Questions)**과 시각화 방법이 다릅니다.
+
+#### A. 주간 분석 (Weekly) - "기민한 대응"
+
+**핵심 질문**:
+- "지난주 대비 효율이 급격히 떨어진 광고는 무엇인가?"
+- "주말 효율은 어떠했는가?"
+
+**비교 대상**: Current Week vs Previous Week (WoW - Week over Week)
+
+**주요 시각화**:
+
+1. **KPI Scorecard**
+   - 노출, 클릭, 지출, 리드, CPL의 전주 대비 증감률(%) 및 절대값 차이
+   - 예: `125건 ↑18% (+19건)` + `이전 기간: 106건`
+
+2. **Daily Trend Line**
+   - 이번 주 vs 지난주 일별 추이를 겹쳐서 표시
+   - 회색 점선: 지난주, 실선: 이번 주
+
+3. **요일별 히트맵**
+   - 요일별 CTR/CPL 효율 비교
+   - 예: "화요일 효율이 가장 높음"
+
+4. **Efficiency Grade 변동**
+   - S/A/B/C 등급이 지난주 대비 변동된 광고 리스트
+
+#### B. 월간 분석 (Monthly) - "예산 및 방향성"
+
+**핵심 질문**:
+- "이번 달 예산 소진 속도는 적절한가?"
+- "캠페인 목표를 달성했는가?"
+
+**비교 대상**: Current Month vs Previous Month (MoM)
+
+**주요 시각화**:
+
+1. **Budget Pacing (속도계)**
+   - 월 예산 대비 현재 소진율
+   - 이상적 소진율 라인 포함
+
+2. **Cumulative Spend/Leads**
+   - 월초부터 월말까지 누적 그래프
+   - 목표 달성 여부 확인
+
+3. **Platform/Device Pie Chart**
+   - 플랫폼(FB/IG) 및 디바이스별 점유율 변화
+
+#### C. 분기/반기/연간 (Long-term) - "전략적 인사이트"
+
+**핵심 질문**:
+- "계절적 요인(Seasonality)이 존재하는가?"
+- "크리에이티브 피로도는 언제 오는가?"
+
+**비교 대상**: Current Q vs Previous Q (QoQ) 또는 Year over Year (YoY)
+
+**주요 시각화**:
+
+1. **Bar Chart (Monthly Aggregate)**
+   - 월별 막대 그래프로 장기 추세 확인
+
+2. **Creative Fatigue Analysis**
+   - 광고 소재별 수명 주기(Life Cycle) 분석
+   - CPL 상승 시점 포착
+
+---
+
+### 9.5.2 유의미한 통계 및 텍스트 생성 (Insight Generation)
+
+단순히 그래프만 보여주는 것이 아니라, **"해석된 텍스트"**를 제공해야 합니다.
+
+#### 분석 로직 예시 (Rule-based Analysis)
+
+```python
+# utils/insight_generator.py
+def generate_weekly_insight(current, previous):
+    """
+    주간 분석 코멘트 생성 로직
+
+    Args:
+        current (dict): 현재 주간 데이터
+        previous (dict): 이전 주간 데이터
+
+    Returns:
+        list: 인사이트 텍스트 리스트
+    """
+    insights = []
+
+    # 1. CPL(효율) 분석
+    cpl_change = ((current['cpl'] - previous['cpl']) / previous['cpl']) * 100
+
+    if cpl_change > 20:
+        insights.append(
+            f"🔴 **경고**: 리드당 비용(CPL)이 전주 대비 {cpl_change:.1f}% 급증했습니다. "
+            f"소재 교체가 시급합니다."
+        )
+    elif cpl_change < -20:
+        insights.append(
+            f"🟢 **호재**: 효율이 {abs(cpl_change):.1f}% 개선되었습니다. "
+            f"예산 증액을 고려하세요."
+        )
+
+    # 2. CTR(반응률) 분석
+    if current['ctr'] < 1.0:
+        insights.append(
+            "⚠️ **주의**: 평균 클릭률(CTR)이 1% 미만(저조)입니다. "
+            "썸네일/카피 수정이 필요합니다."
+        )
+
+    # 3. 지출 vs 리드 불균형
+    spend_change = ((current['spend'] - previous['spend']) / previous['spend']) * 100
+    leads_change = ((current['leads'] - previous['leads']) / previous['leads']) * 100
+
+    if spend_change > 10 and leads_change < -10:
+        insights.append(
+            "⚠️ **불균형**: 지출은 증가했지만 리드는 감소했습니다. "
+            "타겟팅 재검토가 필요합니다."
+        )
+
+    return "\n".join(insights) if insights else "✅ 전반적으로 안정적인 성과를 유지하고 있습니다."
+```
+
+---
+
+### 9.5.3 텔레그램 자동 리포팅 시스템 아키텍처
+
+**목표**: 지정된 시간(화요일 09:00 등)에 텍스트 요약 + 주요 차트 이미지를 텔레그램으로 전송
+
+#### 시스템 구조
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                Railway Cron Job (Reporter)                  │
+│ 1. Trigger: 설정된 Cron Schedule (화 09:00, 매월 2일 09:00)   │
+│ 2. Action:                                                  │
+│    a. Supabase에서 해당 기간(주간/월간) 데이터 조회            │
+│    b. Python Script 실행 (pandas + plotly + kaleido)         │
+│       → 데이터 집계 및 비교 분석                             │
+│       → 차트 이미지 생성 (.png)                              │
+│       → 요약 텍스트 생성 (GPT-4o 연동 권장, 또는 룰베이스)      │
+│    c. Telegram API로 메시지 + 사진 전송                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### 리포트 전송 스케줄 (Railway Cron 설정)
+
+Railway Cron은 UTC 기준이므로 KST 09:00은 UTC 00:00입니다.
+
+| 리포트 종류 | KST 실행 시간 | Railway Cron Expression (UTC) | 비고 |
+|------------|-------------|------------------------------|------|
+| 주간 리포트 | 매주 화요일 09:00 | `0 0 * * 2` | 월~일 데이터 집계 후 화요일 발송 |
+| 월간 리포트 | 매월 2일 09:00 | `0 0 2 * *` | 1일은 데이터 마감/검증, 2일 발송 |
+| 분기 리포트 | 1, 4, 7, 10월 2일 | `0 0 2 1,4,7,10 *` | 분기/반기 통합 로직 처리 |
+
+#### 텔레그램 메시지 포맷 (예시)
+
+```
+[BAS] 📅 11월 2주차 주간 리포트
+(기간: 2025.11.11 ~ 11.17)
+
+📊 핵심 성과 요약
+• 지출: 1,540,000원 (🔺12%)
+• 리드: 45건 (🔻5%)
+• CPL: 34,220원 (🔺18%) → 🔴 효율 저하
+
+💡 주요 인사이트
+1. 전주 대비 지출은 늘었으나 리드 수는 감소하여 효율이 떨어졌습니다.
+2. '고객찾기_V2' 소재의 피로도가 높은 것으로 추정됩니다.
+3. 주말(토,일) CTR이 평일 대비 30% 낮습니다.
+
+📎 첨부: 주간_성과_차트.png
+```
+
+---
+
+### 9.5.4 구현 로드맵 (Action Plan)
+
+#### Step 1: 리포팅 전용 스크립트 작성 (`lib/reporter.py`)
+
+Node.js보다 Python을 사용하는 것을 권장합니다. Streamlit에서 이미 Plotly와 Pandas를 사용하고 있으므로, 차트 생성 로직을 공유할 수 있기 때문입니다.
+
+**필요 라이브러리**:
+- `python-telegram-bot`: 메시지 전송
+- `kaleido`: Plotly 차트를 이미지로 변환
+- `pandas`, `plotly`: 데이터 처리 및 시각화
+
+#### Step 2: 차트 이미지 생성 함수 구현
+
+```python
+# utils/report_generator.py
+import plotly.io as pio
+import plotly.graph_objects as go
+
+def generate_chart_image(fig, filename):
+    """
+    Plotly 객체를 이미지로 저장
+
+    Args:
+        fig: Plotly Figure 객체
+        filename: 저장할 파일명 (확장자 제외)
+
+    Returns:
+        str: 저장된 이미지 경로
+    """
+    output_path = f"temp/{filename}.png"
+    fig.write_image(output_path, width=800, height=500)
+    return output_path
+```
+
+#### Step 3: 스케줄러(Railway) 설정
+
+Railway에서 새로운 Service를 생성하거나 기존 Worker Service에 Python 환경을 추가하여 Cron Job을 등록합니다.
+
+**필요 파일**:
+```
+lib/
+├── reporter.py           # 메인 리포터
+├── insight_generator.py  # 인사이트 생성
+└── telegram_sender.py    # 텔레그램 전송
+
+requirements-reporter.txt  # Python 의존성
+```
+
+#### Step 4: 관리자 설정 기능 (Streamlit 추가)
+
+Streamlit 대시보드에 "리포트 설정" 페이지를 추가하여 다음을 관리자가 직접 입력하게 합니다:
+- 텔레그램 챗 ID
+- 알림 수신 여부 (ON/OFF)
+- 리포트 주기 설정 (주간/월간/분기)
+
+---
+
+### 9.5.5 추천 수정 사항 (현재 구현 대비)
+
+1. **Weekly Summary 테이블 활용**
+   - 현재 `generate_weekly_summary` 함수가 잘 작동하므로
+   - 리포팅 시 `raw_data`를 매번 쿼리하기보다 `weekly_summary` 테이블을 조회하여 속도 향상
+
+2. **메시지 템플릿화**
+   - 텔레그램 메시지 포맷을 코드에 하드코딩하지 말고
+   - 별도의 템플릿 파일 (YAML 또는 JSON)로 분리하여 유지보수 용이
+
+3. **이미지 생성 엔진**
+   - Railway(Linux 환경)에서 이미지 생성을 위해 `kaleido` 패키지 설치 필요
+   - `requirements-reporter.txt`에 꼭 포함:
+     ```
+     kaleido==0.2.1
+     python-telegram-bot==20.7
+     plotly==5.24.1
+     pandas==2.2.3
+     supabase==2.11.2
+     ```
+
+4. **에러 핸들링 및 재시도**
+   - Telegram API 호출 실패 시 3회 재시도
+   - Supabase 연결 실패 시 Admin에게 알림
+   - 차트 생성 실패 시 텍스트만 전송
 
 ---
 
@@ -974,6 +1294,8 @@ app.use('/admin/queues', serverAdapter.getRouter());
 |------|------|----------|
 | 1.0.0 | 2025-11-18 | 초안 작성 |
 | 1.1.0 | 2025-11-18 | 리뷰 피드백 반영 (Job Queue, 파티셔닝 자동화, Token 갱신 등) |
+| 1.2.0 | 2025-11-19 | Phase 2 (Streamlit 대시보드) 완료 반영 |
+| 1.3.0 | 2025-11-19 | Phase 3 상세 계획 추가 (시각화 및 자동 리포팅 가이드) |
 
 ### 12.2 참고 자료 (추가)
 
@@ -985,9 +1307,9 @@ app.use('/admin/queues', serverAdapter.getRouter());
 
 ---
 
-**문서 버전**: 1.1.0
-**최종 수정**: 2025-11-18
-**다음 리뷰**: 2025-12-01
+**문서 버전**: 1.3.0
+**최종 수정**: 2025-11-19
+**다음 리뷰**: 2025-12-15
 
 ---
 

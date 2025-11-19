@@ -3,6 +3,12 @@
 .upstash.json
 streamlit-app/.env
 
+# Archive 폴더 (민감한 정보 포함)
+archive/
+
+# Claude 로컬 설정
+.claude/settings.local.json
+
 # Node modules
 node_modules/
 
