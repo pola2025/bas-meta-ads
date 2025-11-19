@@ -793,12 +793,452 @@ vercel --prod
 - [ ] 차트 시각화 (Recharts)
 - [ ] 이메일 알림 (Resend)
 
-### Phase 3: 멀티 클라이언트 (2주)
+### Phase 3: 자동 리포팅 시스템 (3주)
 
+**목표**: 주간/월간 성과 리포트를 텔레그램으로 자동 전송
+
+#### Week 6: Railway 배포 및 자동화
+
+**3-1. GitHub 리포지토리 생성**
+
+```bash
+# 1. GitHub에서 새 리포지토리 생성 (예: bas-meta-ads)
+# 2. 로컬 리포지토리와 연결
+cd F:/bas_meta
+git remote add origin https://github.com/yourusername/bas-meta-ads.git
+git branch -M main
+git push -u origin main
+```
+
+**3-2. Railway 프로젝트 생성 및 배포**
+
+1. https://railway.app 접속
+2. "New Project" → "Deploy from GitHub repo"
+3. Repository 선택: `bas-meta-ads`
+4. **Service 설정**:
+   - Name: `bas-meta-worker`
+   - Start Command: `npm run worker`
+   - Health Check: 비활성화 (Worker는 HTTP 서버 아님)
+
+5. **환경 변수 설정** (Railway Dashboard → Variables):
+   ```bash
+   # Meta Ads API
+   META_APP_ID=1474546053653616
+   META_APP_SECRET=5d3ea72d4293c8f78842334b8558175c
+
+   # Supabase
+   SUPABASE_URL=https://mpljqcuqrrfwzamfyxnz.supabase.co
+   SUPABASE_SERVICE_KEY=eyJhbGci...
+
+   # Upstash Redis
+   UPSTASH_REDIS_URL=rediss://default:...@...upstash.io:6379
+
+   # Telegram
+   TELEGRAM_BOT_TOKEN=7947112373:...
+   TELEGRAM_ADMIN_CHAT_ID=-1003394139746
+
+   # Settings
+   DATA_DAYS=7
+   ```
+
+6. **Cron Job 추가** (Railway Dashboard → Settings → Cron):
+   - Schedule: `0 0 * * 1` (매주 월요일 00:00 UTC = KST 09:00)
+   - Command: `npm run producer`
+
+7. **배포 확인**:
+   ```bash
+   # Railway Logs 확인
+   # 👷 Worker started (concurrency: 2) 메시지 확인
+   ```
+
+**3-3. Streamlit 대시보드 배포**
+
+**옵션 A: Streamlit Community Cloud (권장)**
+
+1. https://share.streamlit.io 접속
+2. "New app" 클릭
+3. Repository: `bas-meta-ads` 선택
+4. Main file path: `streamlit-app/app.py`
+5. **Secrets 설정**:
+   ```toml
+   # .streamlit/secrets.toml
+   SUPABASE_URL = "https://mpljqcuqrrfwzamfyxnz.supabase.co"
+   SUPABASE_SERVICE_KEY = "eyJhbGci..."
+   ```
+6. Deploy 클릭
+7. URL 저장: `https://your-app.streamlit.app`
+
+---
+
+#### Week 7: 텔레그램 자동 리포팅 구현
+
+**3-4. Python 리포터 환경 구성**
+
+**폴더 구조 생성**:
+```bash
+mkdir -p lib/reporter
+touch lib/reporter/__init__.py
+touch lib/reporter/main.py
+touch lib/reporter/insight_generator.py
+touch lib/reporter/telegram_sender.py
+touch lib/reporter/chart_generator.py
+touch requirements-reporter.txt
+```
+
+**requirements-reporter.txt 작성**:
+```
+python-telegram-bot==20.7
+kaleido==0.2.1
+plotly==5.24.1
+pandas==2.2.3
+supabase==2.11.2
+python-dotenv==1.0.1
+```
+
+**3-5. 인사이트 생성기 구현**
+
+**파일 생성**: `lib/reporter/insight_generator.py`
+
+```python
+def generate_weekly_insight(current, previous):
+    """
+    주간 성과 분석 및 인사이트 생성
+
+    Args:
+        current (dict): 현재 주간 데이터
+            {
+                'impressions': int,
+                'clicks': int,
+                'spend': float,
+                'leads': int,
+                'cpl': float,
+                'ctr': float
+            }
+        previous (dict): 이전 주간 데이터 (동일 구조)
+
+    Returns:
+        str: 인사이트 텍스트 (Markdown 형식)
+    """
+    insights = []
+
+    # 1. CPL (효율) 분석
+    if previous['cpl'] > 0:
+        cpl_change = ((current['cpl'] - previous['cpl']) / previous['cpl']) * 100
+    else:
+        cpl_change = 0
+
+    if cpl_change > 20:
+        insights.append(
+            f"🔴 **경고**: 리드당 비용(CPL)이 전주 대비 {cpl_change:.1f}% 급증했습니다. "
+            f"소재 교체가 시급합니다."
+        )
+    elif cpl_change < -20:
+        insights.append(
+            f"🟢 **호재**: 효율이 {abs(cpl_change):.1f}% 개선되었습니다. "
+            f"예산 증액을 고려하세요."
+        )
+
+    # 2. CTR (반응률) 분석
+    if current['ctr'] < 1.0:
+        insights.append(
+            "⚠️ **주의**: 평균 클릭률(CTR)이 1% 미만(저조)입니다. "
+            "썸네일/카피 수정이 필요합니다."
+        )
+
+    # 3. 지출 vs 리드 불균형
+    if previous['spend'] > 0 and previous['leads'] > 0:
+        spend_change = ((current['spend'] - previous['spend']) / previous['spend']) * 100
+        leads_change = ((current['leads'] - previous['leads']) / previous['leads']) * 100
+
+        if spend_change > 10 and leads_change < -10:
+            insights.append(
+                "⚠️ **불균형**: 지출은 증가했지만 리드는 감소했습니다. "
+                "타겟팅 재검토가 필요합니다."
+            )
+
+    return "\n".join(insights) if insights else "✅ 전반적으로 안정적인 성과를 유지하고 있습니다."
+```
+
+**3-6. 차트 이미지 생성기 구현**
+
+**파일 생성**: `lib/reporter/chart_generator.py`
+
+```python
+import plotly.graph_objects as go
+import plotly.io as pio
+
+def generate_weekly_chart(data, filename='weekly_chart'):
+    """
+    주간 성과 차트 이미지 생성
+
+    Args:
+        data (list): 일별 데이터 리스트
+            [
+                {'date': '2025-11-11', 'impressions': 1000, 'clicks': 50, 'spend': 10000, 'leads': 5},
+                ...
+            ]
+        filename (str): 저장할 파일명 (확장자 제외)
+
+    Returns:
+        str: 저장된 이미지 경로
+    """
+    dates = [d['date'] for d in data]
+    impressions = [d['impressions'] for d in data]
+    clicks = [d['clicks'] for d in data]
+    spend = [d['spend'] for d in data]
+    leads = [d['leads'] for d in data]
+
+    # 서브플롯 생성 (2x2 그리드)
+    from plotly.subplots import make_subplots
+
+    fig = make_subplots(
+        rows=2, cols=2,
+        subplot_titles=('노출수', '클릭수', '지출', '리드수'),
+        vertical_spacing=0.12,
+        horizontal_spacing=0.1
+    )
+
+    # 노출수
+    fig.add_trace(
+        go.Scatter(x=dates, y=impressions, mode='lines+markers', name='노출수', line=dict(color='#4F46E5')),
+        row=1, col=1
+    )
+
+    # 클릭수
+    fig.add_trace(
+        go.Scatter(x=dates, y=clicks, mode='lines+markers', name='클릭수', line=dict(color='#10B981')),
+        row=1, col=2
+    )
+
+    # 지출
+    fig.add_trace(
+        go.Scatter(x=dates, y=spend, mode='lines+markers', name='지출', line=dict(color='#F59E0B')),
+        row=2, col=1
+    )
+
+    # 리드수
+    fig.add_trace(
+        go.Scatter(x=dates, y=leads, mode='lines+markers', name='리드수', line=dict(color='#EF4444')),
+        row=2, col=2
+    )
+
+    # 레이아웃 설정
+    fig.update_layout(
+        title_text="주간 성과 추이",
+        showlegend=False,
+        height=600,
+        width=800,
+        font=dict(family="Malgun Gothic, sans-serif", size=12)
+    )
+
+    # 이미지로 저장
+    output_path = f"/tmp/{filename}.png"
+    fig.write_image(output_path)
+
+    return output_path
+```
+
+**3-7. 텔레그램 전송기 구현**
+
+**파일 생성**: `lib/reporter/telegram_sender.py`
+
+```python
+import os
+from telegram import Bot
+from telegram.constants import ParseMode
+
+async def send_weekly_report(summary, insights, chart_path):
+    """
+    주간 리포트를 텔레그램으로 전송
+
+    Args:
+        summary (dict): KPI 요약 데이터
+        insights (str): 인사이트 텍스트
+        chart_path (str): 차트 이미지 경로
+
+    Returns:
+        bool: 전송 성공 여부
+    """
+    bot = Bot(token=os.getenv('TELEGRAM_BOT_TOKEN'))
+    chat_id = os.getenv('TELEGRAM_ADMIN_CHAT_ID')
+
+    # 메시지 포맷
+    message = f"""
+[BAS] 📅 주간 리포트
+(기간: {summary['period_start']} ~ {summary['period_end']})
+
+📊 핵심 성과 요약
+• 지출: {summary['spend']:,}원 ({summary['spend_change']:+.1f}%)
+• 리드: {summary['leads']:,}건 ({summary['leads_change']:+.1f}%)
+• CPL: {summary['cpl']:,}원 ({summary['cpl_change']:+.1f}%)
+
+💡 주요 인사이트
+{insights}
+    """
+
+    try:
+        # 차트 이미지 전송
+        with open(chart_path, 'rb') as photo:
+            await bot.send_photo(
+                chat_id=chat_id,
+                photo=photo,
+                caption=message,
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+        return True
+
+    except Exception as e:
+        print(f"Telegram 전송 실패: {e}")
+        return False
+```
+
+**3-8. 메인 리포터 구현**
+
+**파일 생성**: `lib/reporter/main.py`
+
+```python
+#!/usr/bin/env python3
+import os
+import sys
+import asyncio
+from datetime import datetime, timedelta
+from dotenv import load_dotenv
+from supabase import create_client
+from insight_generator import generate_weekly_insight
+from chart_generator import generate_weekly_chart
+from telegram_sender import send_weekly_report
+
+load_dotenv()
+
+async def run_weekly_report():
+    """주간 리포트 실행"""
+
+    # Supabase 연결
+    supabase = create_client(
+        os.getenv('SUPABASE_URL'),
+        os.getenv('SUPABASE_SERVICE_KEY')
+    )
+
+    # 지난주 기간 계산
+    today = datetime.now()
+    last_week_end = today - timedelta(days=today.weekday() + 1)  # 지난주 일요일
+    last_week_start = last_week_end - timedelta(days=6)  # 지난주 월요일
+
+    period_start = last_week_start.strftime('%Y-%m-%d')
+    period_end = last_week_end.strftime('%Y-%m-%d')
+
+    # 데이터 조회
+    response = supabase.table('weekly_summary') \
+        .select('*') \
+        .gte('week_start', period_start) \
+        .lte('week_end', period_end) \
+        .execute()
+
+    if not response.data:
+        print("데이터 없음")
+        return
+
+    # 현재 주간 데이터 집계
+    current = aggregate_data(response.data)
+
+    # 이전 주간 데이터 조회
+    prev_week_start = (last_week_start - timedelta(days=7)).strftime('%Y-%m-%d')
+    prev_week_end = (last_week_end - timedelta(days=7)).strftime('%Y-%m-%d')
+
+    prev_response = supabase.table('weekly_summary') \
+        .select('*') \
+        .gte('week_start', prev_week_start) \
+        .lte('week_end', prev_week_end) \
+        .execute()
+
+    previous = aggregate_data(prev_response.data) if prev_response.data else current
+
+    # 인사이트 생성
+    insights = generate_weekly_insight(current, previous)
+
+    # 차트 생성
+    chart_path = generate_weekly_chart(response.data)
+
+    # 리포트 전송
+    summary = {
+        'period_start': period_start,
+        'period_end': period_end,
+        'spend': current['spend'],
+        'spend_change': calculate_change(current['spend'], previous['spend']),
+        'leads': current['leads'],
+        'leads_change': calculate_change(current['leads'], previous['leads']),
+        'cpl': current['cpl'],
+        'cpl_change': calculate_change(current['cpl'], previous['cpl'])
+    }
+
+    success = await send_weekly_report(summary, insights, chart_path)
+
+    if success:
+        print("✅ 주간 리포트 전송 완료")
+    else:
+        print("❌ 주간 리포트 전송 실패")
+
+def aggregate_data(data):
+    """데이터 집계"""
+    total_impressions = sum(d['impressions'] for d in data)
+    total_clicks = sum(d['clicks'] for d in data)
+    total_spend = sum(d['spend'] for d in data)
+    total_leads = sum(d['total_leads'] for d in data)
+
+    return {
+        'impressions': total_impressions,
+        'clicks': total_clicks,
+        'spend': total_spend,
+        'leads': total_leads,
+        'cpl': total_spend / total_leads if total_leads > 0 else 0,
+        'ctr': (total_clicks / total_impressions * 100) if total_impressions > 0 else 0
+    }
+
+def calculate_change(current, previous):
+    """증감률 계산"""
+    if previous == 0:
+        return 0
+    return ((current - previous) / previous) * 100
+
+if __name__ == '__main__':
+    asyncio.run(run_weekly_report())
+```
+
+**3-9. Railway Cron Job 추가 (리포터)**
+
+Railway Dashboard → Settings → Cron:
+
+| 리포트 | Schedule | Command |
+|--------|----------|---------|
+| 주간 리포트 | `0 0 * * 2` | `python lib/reporter/main.py` |
+| 월간 리포트 | `0 0 2 * *` | `python lib/reporter/main.py --type monthly` |
+
+**3-10. 테스트**
+
+```bash
+# 로컬 테스트
+cd F:/bas_meta
+python lib/reporter/main.py
+
+# Railway에서 수동 실행
+# Railway Dashboard → Deployments → Run Command
+python lib/reporter/main.py
+```
+
+---
+
+### Phase 4: 멀티 클라이언트 및 확장 (2주)
+
+- [ ] 2-3개 추가 클라이언트 등록
+- [ ] 멀티 클라이언트 기능 검증
 - [ ] JWT 인증 시스템 (Next-Auth)
 - [ ] Admin 패널 (클라이언트 관리)
 - [ ] 사용자 초대 시스템
 - [ ] 플랜별 기능 제한
+- [ ] PDF 리포트 생성
+- [ ] 광고별 상세 페이지
+- [ ] 반응형 디자인 (모바일)
 
 ---
 
