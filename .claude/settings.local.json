@@ -31,7 +31,12 @@
       "Bash(del \"F:\\bas_meta\\supabase\\migrations\\20251118230117_fix_weekly_summary_ambiguous_column.sql\")",
       "Bash(node check-collected-data.js:*)",
       "Bash(node test-dashboard-query.js:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git fetch:*)",
+      "Bash(railway:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: Add index.js entry point for Railway deployment\n\n- Create index.js with MODE environment variable support\n- Update package.json scripts to use new entry point\n- MODE=worker (default): Run worker to process queue jobs\n- MODE=producer: Run producer to add jobs to queue\n- Fix MODULE_NOT_FOUND error for Railway deployment\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit:*)",
+      "Bash(git push)"
     ],
     "deny": [],
     "ask": []
