@@ -18,7 +18,16 @@ console.log('');
 
 if (mode === 'producer') {
   console.log('📊 Running Producer - Adding data collection jobs to queue');
-  require('./lib/producer.js');
+  const { enqueueDataCollectionJobs } = require('./lib/producer.js');
+  enqueueDataCollectionJobs()
+    .then((result) => {
+      console.log('✅ Producer completed:', result);
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error('❌ Producer failed:', error);
+      process.exit(1);
+    });
 } else if (mode === 'worker') {
   console.log('⚙️  Running Worker - Processing jobs from queue');
   require('./lib/worker.js');
