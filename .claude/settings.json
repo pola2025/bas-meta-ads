@@ -1,0 +1,71 @@
+{
+  "project": {
+    "name": "BAS Meta Ads Analytics",
+    "description": "Meta(Facebook/Instagram) 광고 데이터 자동 수집 및 분석 플랫폼",
+    "version": "1.2.2",
+    "documentation": {
+      "specification": "docs/PROJECT_SPECIFICATION.md",
+      "implementation": "docs/IMPLEMENTATION_GUIDE.md",
+      "progress": "docs/PROGRESS_SUMMARY.md"
+    }
+  },
+  "guidelines": {
+    "database": {
+      "enforce_variable_prefix": true,
+      "sql_variable_prefix": "v_",
+      "sql_parameter_prefix": "p_",
+      "required_fields": {
+        "raw_data": ["currency"],
+        "weekly_summary": ["currency"],
+        "clients": ["auth_status", "meta_access_token_id", "meta_refresh_token_id"]
+      }
+    },
+    "meta_api": {
+      "enforce_pagination": true,
+      "enforce_null_checks": true,
+      "enforce_token_sanitization": true
+    },
+    "bullmq": {
+      "required_settings": {
+        "keepAlive": 30000,
+        "concurrency": 2
+      }
+    },
+    "dashboard": {
+      "kpi_format": "value + percent + absolute + previous",
+      "chart_library": "plotly",
+      "enforce_empty_data_handling": true
+    }
+  },
+  "workflow": {
+    "before_database_changes": [
+      "Read docs/PROJECT_SPECIFICATION.md section 3",
+      "Check table schema consistency",
+      "Verify SQL variable naming (v_ prefix)"
+    ],
+    "before_api_changes": [
+      "Read docs/PROJECT_SPECIFICATION.md section 5",
+      "Verify pagination implementation",
+      "Check null/undefined handling"
+    ],
+    "before_queue_changes": [
+      "Read docs/PROJECT_SPECIFICATION.md section 4",
+      "Verify Upstash Redis settings",
+      "Check concurrency and retry logic"
+    ]
+  },
+  "rules": [
+    "✅ 항상 docs/PROJECT_SPECIFICATION.md 준수",
+    "✅ SQL 변수는 v_ 접두사 필수",
+    "✅ Meta API 페이지네이션 필수 구현",
+    "✅ Vault 토큰은 공백 제거 필수",
+    "✅ Null/undefined 체크 필수",
+    "✅ Upstash Redis keepAlive 30초 설정",
+    "✅ BullMQ concurrency 2로 제한",
+    "✅ KPI 카드는 증감률+절대값+이전값 표시",
+    "⚠️ 가이드와 불일치 시 즉시 중단하고 사용자에게 보고"
+  ],
+  "auto_skills": [
+    "bas-meta-guide"
+  ]
+}

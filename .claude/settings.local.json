@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:apps.make.com)",
+      "WebFetch(domain:www.make.com)",
+      "WebFetch(domain:blog.chatdaeri.com)",
+      "Bash(npm install:*)",
+      "Bash(npm test)",
+      "Bash(node exchange-token-auto.js:*)",
+      "Bash(scoop --version:*)",
+      "Bash(npx supabase init)",
+      "Bash(npx supabase:*)",
+      "WebFetch(domain:supabase.com)",
+      "Bash(node execute-sql.js:*)",
+      "Bash(node insert-test-client.js:*)",
+      "Bash(node update-client-email.js:*)",
+      "Bash(npx @upstash/cli --version)",
+      "Bash(npx @upstash/cli auth login)",
+      "WebFetch(domain:upstash.com)",
+      "WebFetch(domain:docs.upstash.com)",
+      "Bash(npx @upstash/cli redis create:*)",
+      "Bash(npm run worker:*)",
+      "Bash(npm run producer:*)",
+      "Bash(node save-token-to-vault.js:*)",
+      "Bash(node test-meta-api.js:*)",
+      "Bash(node test-vault-function.js)",
+      "Bash(node check-queue.js:*)",
+      "Bash(node check-vault-token.js:*)",
+      "Bash(node clear-queue.js:*)",
+      "Bash(del \"F:\\bas_meta\\supabase\\migrations\\20251118230117_fix_weekly_summary_ambiguous_column.sql\")",
+      "Bash(node check-collected-data.js:*)",
+      "Bash(node test-dashboard-query.js:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
