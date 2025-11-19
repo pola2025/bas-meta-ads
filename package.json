@@ -4,8 +4,8 @@
   "description": "BAS Meta Ads Analytics Platform - 자동 데이터 수집 및 분석",
   "main": "index.js",
   "scripts": {
-    "producer": "node lib/producer.js",
-    "worker": "node lib/worker.js",
+    "producer": "MODE=producer node index.js",
+    "worker": "MODE=worker node index.js",
     "test": "node test.js",
     "start": "node index.js"
   },
