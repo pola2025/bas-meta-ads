@@ -31,8 +31,28 @@ if (mode === 'producer') {
 } else if (mode === 'worker') {
   console.log('⚙️  Running Worker - Processing jobs from queue');
   require('./lib/worker.js');
+} else if (mode === 'full') {
+  // Railway Cron용: Producer → Worker 순차 실행
+  console.log('🔄 Running FULL mode - Producer then Worker');
+  const { enqueueDataCollectionJobs } = require('./lib/producer.js');
+
+  enqueueDataCollectionJobs()
+    .then((result) => {
+      console.log('✅ Producer completed:', result);
+      console.log('');
+      console.log('⚙️  Starting Worker to process enqueued jobs...');
+
+      // Worker 시작
+      require('./lib/worker.js');
+
+      // Worker는 무한 실행되므로 여기서 종료하지 않음
+    })
+    .catch((error) => {
+      console.error('❌ Producer failed:', error);
+      process.exit(1);
+    });
 } else {
   console.error(`❌ Unknown MODE: ${mode}`);
-  console.error('   Valid modes: producer, worker');
+  console.error('   Valid modes: producer, worker, full');
   process.exit(1);
 }
