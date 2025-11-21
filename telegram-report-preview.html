@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>텔레그램 리포트 미리보기</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .telegram-chat {
+            background: #0088cc;
+            padding: 15px;
+            border-radius: 15px 15px 0 0;
+            color: white;
+            font-weight: 600;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .telegram-chat::before {
+            content: "🤖";
+            font-size: 24px;
+        }
+
+        .telegram-message {
+            background: white;
+            border-radius: 0 0 15px 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .report-content {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.8;
+            color: #333;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .report-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #0088cc;
+            margin-bottom: 10px;
+        }
+
+        .report-date {
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .separator {
+            border: none;
+            border-top: 1px solid #e0e0e0;
+            margin: 15px 0;
+        }
+
+        .section-title {
+            font-weight: bold;
+            color: #0088cc;
+            margin: 15px 0 10px 0;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+        }
+
+        .metric-label {
+            color: #555;
+        }
+
+        .metric-value {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .positive {
+            color: #10b981;
+        }
+
+        .negative {
+            color: #ef4444;
+        }
+
+        .insight-item {
+            padding: 8px 0;
+            border-left: 3px solid #0088cc;
+            padding-left: 10px;
+            margin: 5px 0;
+            background: #f8f9fa;
+        }
+
+        .ad-rank {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .ad-name {
+            font-weight: bold;
+            color: #0088cc;
+            margin-bottom: 5px;
+        }
+
+        .dashboard-link {
+            display: inline-block;
+            background: #0088cc;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            margin: 15px 0;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .dashboard-link:hover {
+            background: #006699;
+        }
+
+        .footer {
+            text-align: center;
+            color: #999;
+            margin-top: 20px;
+            font-size: 12px;
+        }
+
+        .emoji {
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="telegram-chat">
+            BAS Meta Ads Bot
+        </div>
+        <div class="telegram-message">
+            <div class="report-content">
+                <div class="report-title">📊 [BAS] 메타광고 클라이언트 주간 리포트</div>
+                <div class="report-date">📅 2025-11-17 ~ 2025-11-23</div>
+                <hr class="separator">
+
+                <div class="section-title">📈 핵심 성과</div>
+
+                <div class="metric-row">
+                    <span class="metric-label">💰 총 지출:</span>
+                    <span class="metric-value">$1,234.56</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">🎯 총 리드:</span>
+                    <span class="metric-value">45건</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">💵 평균 CPL:</span>
+                    <span class="metric-value">$27.43</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">📊 평균 CTR:</span>
+                    <span class="metric-value">2.34%</span>
+                </div>
+
+                <div style="margin-top: 10px;">
+                    <div class="metric-row">
+                        <span class="metric-label">👁️ 노출수:</span>
+                        <span class="metric-value">52,789회</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">👆 클릭수:</span>
+                        <span class="metric-value">1,235회</span>
+                    </div>
+                </div>
+
+                <hr class="separator">
+
+                <div class="section-title">📊 전주 대비 변화</div>
+
+                <div class="metric-row">
+                    <span class="metric-label">리드:</span>
+                    <span class="metric-value positive">▲ 15.3% ⬆️ 성장!</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">CPL:</span>
+                    <span class="metric-value positive">▼ 8.2% ⬇️ 개선!</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">지출:</span>
+                    <span class="metric-value">▲ 5.7%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">CTR:</span>
+                    <span class="metric-value positive">▲ 12.1%</span>
+                </div>
+
+                <hr class="separator">
+
+                <div class="section-title">💡 이번 주 인사이트</div>
+
+                <div class="insight-item">
+                    • CPL이 8.2% 감소하여 비용 효율성이 크게 개선되었습니다
+                </div>
+                <div class="insight-item">
+                    • 리드가 15.3% 증가하여 전환이 성공적입니다
+                </div>
+                <div class="insight-item">
+                    • CTR이 12.1% 증가하여 광고 소재가 효과적입니다
+                </div>
+                <div class="insight-item">
+                    • "여름 시즌 프로모션" 광고가 최고 효율을 보이고 있습니다 (CPL: $22.50)
+                </div>
+
+                <hr class="separator">
+
+                <div class="section-title">🏆 Best Performing 광고 (TOP 5)</div>
+
+                <div class="ad-rank">
+                    <div class="ad-name">1. 여름 시즌 프로모션 A/B 테스트</div>
+                    <div>💵 CPL: $22.50 | 📊 CTR: 3.21% | 🎯 리드: 12건</div>
+                </div>
+
+                <div class="ad-rank">
+                    <div class="ad-name">2. 신규 고객 웰컴 캠페인</div>
+                    <div>💵 CPL: $24.80 | 📊 CTR: 2.89% | 🎯 리드: 10건</div>
+                </div>
+
+                <div class="ad-rank">
+                    <div class="ad-name">3. 리타겟팅 특별 할인</div>
+                    <div>💵 CPL: $26.30 | 📊 CTR: 2.67% | 🎯 리드: 8건</div>
+                </div>
+
+                <div class="ad-rank">
+                    <div class="ad-name">4. 브랜드 인지도 향상 캠페인</div>
+                    <div>💵 CPL: $28.90 | 📊 CTR: 2.45% | 🎯 리드: 7건</div>
+                </div>
+
+                <div class="ad-rank">
+                    <div class="ad-name">5. 가을 시즌 사전 예약</div>
+                    <div>💵 CPL: $29.50 | 📊 CTR: 2.34% | 🎯 리드: 8건</div>
+                </div>
+
+                <hr class="separator">
+
+                <div class="section-title">⚠️ 개선 필요 광고</div>
+
+                <div class="ad-rank">
+                    <div class="ad-name">1. 지역 타겟팅 테스트 캠페인</div>
+                    <div>💵 CPL: $45.20 | 📊 CTR: 1.23% | 🎯 리드: 3건</div>
+                    <div style="color: #ef4444; margin-top: 5px;">⚡️ 액션: 광고 소재 개선 또는 타겟팅 조정 권장</div>
+                </div>
+
+                <div class="ad-rank">
+                    <div class="ad-name">2. 프리미엄 상품 전환 캠페인</div>
+                    <div>💵 CPL: $52.80 | 📊 CTR: 1.05% | 🎯 리드: 2건</div>
+                    <div style="color: #ef4444; margin-top: 5px;">⚡️ 액션: 광고 소재 개선 또는 타겟팅 조정 권장</div>
+                </div>
+
+                <hr class="separator">
+
+                <div class="section-title">🎯 이번 주 추천 액션</div>
+
+                <div class="insight-item">
+                    1. ✅ "여름 시즌 프로모션..." 광고 예산 20% 증액 고려
+                </div>
+                <div class="insight-item">
+                    2. 📊 비용 효율성이 개선 중입니다 - 현재 전략 유지 권장
+                </div>
+                <div class="insight-item">
+                    3. ⚠️ "지역 타겟팅 테스트..." 광고 크리에이티브 A/B 테스트 권장
+                </div>
+
+                <hr class="separator">
+
+                <div class="section-title">📊 상세 분석 보기</div>
+
+                <a href="https://bas-dashboard.vercel.app/?client=test123&start=2025-11-17&end=2025-11-23&tab=overview" class="dashboard-link" target="_blank">
+                    🔗 대시보드 열기
+                </a>
+
+                <div style="margin-top: 10px; font-size: 13px; color: #666;">
+                    위 링크에서 확인 가능:<br>
+                    ✓ 일별 성과 추이 차트<br>
+                    ✓ 광고별 상세 분석<br>
+                    ✓ AI 추천 인사이트<br>
+                    ✓ 엑셀 다운로드
+                </div>
+
+                <hr class="separator">
+
+                <div class="footer">
+                    🤖 BAS Meta Ads Analytics<br>
+                    📅 발송: 2025-11-24 09:00:00 (KST)
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
