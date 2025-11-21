@@ -13,11 +13,14 @@
 require('dotenv').config();
 const cron = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // 헬퍼 함수: 증감률 계산
 function calculateChange(current, previous) {
@@ -181,6 +184,74 @@ async function getAdPerformanceRanking(clientId, weekStart, weekEnd) {
   }
 }
 
+// Gemini AI 분석 함수
+async function generateAIAnalysis(current, prev, currentCpl, prevCpl, currentCtr, prevCtr, topAds) {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      console.log("⚠️ Gemini API key not set, skipping AI analysis");
+      return "";
+    }
+
+    console.log("\n🤖 Generating AI analysis...");
+
+    const prompt = `당신은 메타 광고 전문가입니다. 다음 주간 성과 데이터를 분석하여 **3가지 핵심 인사이트**와 **2가지 실행 가능한 추천 액션**을 제공해주세요.
+
+**현재 주 성과**:
+- 총 지출: $${current.spend.toFixed(2)}
+- 총 리드: ${current.leads}건
+- 평균 CPL: $${currentCpl.toFixed(2)}
+- 평균 CTR: ${currentCtr.toFixed(2)}%
+- 노출수: ${current.impressions.toLocaleString()}회
+- 클릭수: ${current.clicks}회
+
+**전주 대비 변화**:
+- 지출: $${prev.spend.toFixed(2)} → $${current.spend.toFixed(2)} (${calculateChange(current.spend, prev.spend).toFixed(1)}%)
+- 리드: ${prev.leads}건 → ${current.leads}건 (${calculateChange(current.leads, prev.leads).toFixed(1)}%)
+- CPL: $${prevCpl.toFixed(2)} → $${currentCpl.toFixed(2)} (${calculateChange(currentCpl, prevCpl).toFixed(1)}%)
+- CTR: ${prevCtr.toFixed(2)}% → ${currentCtr.toFixed(2)}% (${calculateChange(currentCtr, prevCtr).toFixed(1)}%)
+
+**광고별 성과 (CPL 낮은 순)**:
+${topAds.slice(0, 6).map((ad, i) => `${i+1}. ${ad.ad_name}
+   CPL: $${ad.avg_cpl.toFixed(2)} | CTR: ${ad.avg_ctr.toFixed(2)}% | 리드: ${ad.total_leads}건`).join('\n')}
+
+**응답 형식** (반드시 아래 형식 준수):
+
+💡 핵심 인사이트
+
+1. [간결한 인사이트 1 - 한 문장으로 요약]
+2. [간결한 인사이트 2 - 한 문장으로 요약]
+3. [간결한 인사이트 3 - 한 문장으로 요약]
+
+🎯 추천 액션
+
+1. [구체적인 액션 1 - 즉시 실행 가능]
+2. [구체적인 액션 2 - 즉시 실행 가능]
+
+**중요**:
+- 각 인사이트는 **1문장 50자 이내**로 간결하게 작성
+- 각 액션은 **1문장 70자 이내**로 구체적으로 작성
+- 텔레그램 메시지에 포함되므로 매우 간결하게 작성
+- 구체적인 숫자와 광고명 포함`;
+
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash-exp',
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 512,
+      }
+    });
+
+    const result = await model.generateContent(prompt);
+    const aiResponse = result.response.text();
+
+    console.log("✅ AI analysis generated");
+    return aiResponse;
+  } catch (error) {
+    console.error("❌ Error generating AI analysis:", error.message);
+    return "";
+  }
+}
+
 // 텔레그램 리포트 발송 (v2)
 async function sendTelegramReport(clientId, clientName, weekStart, weekEnd) {
   try {
@@ -276,7 +347,15 @@ CTR: ${formatChange(changes.ctr)}
     // 추천 액션 생성
     const actionsText = generateRecommendedActions(current, changes, topAds);
 
-    // 메시지 구성 (v2 - 대시보드 링크 제거)
+    // AI 분석 생성 (이전 주 데이터가 있을 때만)
+    let aiAnalysisText = "";
+    if (prevData && prevData.length > 0) {
+      const prevCtr = prev.impressions > 0 ? (prev.clicks / prev.impressions * 100) : 0;
+      const prevCpl = prev.leads > 0 ? (prev.spend / prev.leads) : 0;
+      aiAnalysisText = await generateAIAnalysis(current, prev, currentCpl, prevCpl, currentCtr, prevCtr, topAds);
+    }
+
+    // 메시지 구성 (v2 - 대시보드 링크 제거 + AI 분석 추가)
     const message = `
 📊 [BAS] ${clientName} 주간 리포트
 📅 ${weekStart} ~ ${weekEnd}
@@ -303,6 +382,7 @@ ${insightsText}
 ━━━━━━━━━━━━━━━━━━━━━━
 ${adPerformanceText}
 ${actionsText ? `━━━━━━━━━━━━━━━━━━━━━━\n\n🎯 이번 주 추천 액션\n\n${actionsText}\n` : ''}
+${aiAnalysisText ? `━━━━━━━━━━━━━━━━━━━━━━\n\n🤖 Polarad AI 분석리포트\n\n${aiAnalysisText}\n` : ''}
 ━━━━━━━━━━━━━━━━━━━━━━
 🤖 BAS Meta Ads Analytics
 📅 발송: ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} (KST)
