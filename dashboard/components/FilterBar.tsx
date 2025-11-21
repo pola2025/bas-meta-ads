@@ -27,6 +27,10 @@ export function FilterBar() {
       : 'none'
   )
 
+  // 기본 날짜 범위 (최근 7일)
+  const today = startOfDay(new Date())
+  const defaultStart = subDays(today, 6)
+
   // URL 파라미터 변경 시 상태 동기화
   useEffect(() => {
     const urlCompare = searchParams.get('compare') as ComparisonMode | null
@@ -64,10 +68,6 @@ export function FilterBar() {
       router.replace(`${pathname}?${params.toString()}`, { scroll: false })
     }
   }, [searchParams, pathname, router, defaultStart, today])
-
-  // 기본 날짜 범위 (최근 7일)
-  const today = startOfDay(new Date())
-  const defaultStart = subDays(today, 6)
 
   // URL에서 필터 값 읽기
   const startDate = searchParams.get('start')
