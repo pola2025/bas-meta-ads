@@ -1,13 +1,6 @@
 /**
- * 텔레그램 자동 리포트 발송 스케줄러 v2.0
- *
- * 개선 사항:
- * - 이모지로 가독성 향상
- * - 대시보드 링크 추가
- * - 추천 액션 자동 생성
- * - 섹션별 구분선
- *
- * 실행: node telegram-cron-v2.js
+ * 전체 텔레그램 리포트 즉시 발송 테스트
+ * telegram-cron.js의 모든 기능 포함
  */
 
 require('dotenv').config();
@@ -19,26 +12,22 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// 헬퍼 함수: 증감률 계산
+// 모든 헬퍼 함수들을 telegram-cron.js에서 복사
 function calculateChange(current, previous) {
   if (previous === 0) return 0;
   return ((current - previous) / previous) * 100;
 }
 
-// 헬퍼 함수: 증감률 포맷팅 (이모지 포함)
 function formatChange(changePercent, metric = 'default') {
   const sign = changePercent >= 0 ? '▲' : '▼';
   const value = `${sign} ${Math.abs(changePercent).toFixed(1)}%`;
 
-  // 지표별 긍정/부정 판단
   if (metric === 'cpl') {
-    // CPL은 감소가 좋음
     if (changePercent < -10) return `${value} ⬇️ 대폭 개선!`;
     if (changePercent < -5) return `${value} ⬇️ 개선!`;
     if (changePercent > 20) return `${value} 🔴 주의 필요`;
     if (changePercent > 10) return `${value} ⚠️`;
   } else if (metric === 'leads') {
-    // 리드는 증가가 좋음
     if (changePercent > 20) return `${value} ⬆️ 대폭 성장!`;
     if (changePercent > 10) return `${value} ⬆️ 성장!`;
     if (changePercent < -20) return `${value} 🔴 점검 필요`;
@@ -48,46 +37,39 @@ function formatChange(changePercent, metric = 'default') {
   return value;
 }
 
-// 헬퍼 함수: 인사이트 생성 (개선 버전)
 function generateInsights(changes, topAd, worstAd) {
   const insights = [];
 
-  // CPL 분석
   if (changes.cpl < -10) {
     insights.push(`• CPL이 ${Math.abs(changes.cpl).toFixed(1)}% 감소하여 비용 효율성이 크게 개선되었습니다`);
   } else if (changes.cpl > 15) {
     insights.push(`• CPL이 ${changes.cpl.toFixed(1)}% 증가하여 비용 효율성 개선이 시급합니다`);
   }
 
-  // 리드 분석
   if (changes.leads > 20) {
     insights.push(`• 리드가 ${changes.leads.toFixed(1)}% 증가하여 전환이 성공적입니다`);
   } else if (changes.leads < -20) {
     insights.push(`• 리드가 ${Math.abs(changes.leads).toFixed(1)}% 감소하여 전략 재검토가 필요합니다`);
   }
 
-  // CTR 분석
   if (changes.ctr < -15) {
     insights.push(`• CTR이 ${Math.abs(changes.ctr).toFixed(1)}% 감소하여 광고 소재 개선이 필요합니다`);
   } else if (changes.ctr > 15) {
     insights.push(`• CTR이 ${changes.ctr.toFixed(1)}% 증가하여 광고 소재가 효과적입니다`);
   }
 
-  // Best 광고 강조
   if (topAd) {
     const adNameShort = topAd.ad_name.length > 15 ? topAd.ad_name.substring(0, 15) + "..." : topAd.ad_name;
     insights.push(`• "${adNameShort}" 광고가 최고 효율을 보이고 있습니다 (CPL: $${topAd.avg_cpl.toFixed(2)})`);
   }
 
-  // 일반 상태
   if (insights.length === 0) {
     insights.push("• 전주와 유사한 성과를 유지하고 있습니다");
   }
 
-  return insights.slice(0, 5).join('\n'); // 최대 5개
+  return insights.slice(0, 5).join('\n');
 }
 
-// 헬퍼 함수: 추천 액션 생성
 function generateRecommendedActions(current, changes, topAds) {
   const actions = [];
 
@@ -95,26 +77,22 @@ function generateRecommendedActions(current, changes, topAds) {
 
   const avgCpl = current.spend / current.leads;
 
-  // Best 광고 예산 증액 권장
   const bestAds = topAds.filter(ad => ad.avg_cpl < avgCpl * 0.7 && ad.total_leads >= 2);
   if (bestAds.length > 0) {
     const adNameShort = bestAds[0].ad_name.length > 20 ? bestAds[0].ad_name.substring(0, 20) + "..." : bestAds[0].ad_name;
     actions.push(`1. ✅ "${adNameShort}" 광고 예산 20% 증액 고려`);
   }
 
-  // CPL 개선 추세
   if (changes && changes.cpl < -5) {
     actions.push(`2. 📊 비용 효율성이 개선 중입니다 - 현재 전략 유지 권장`);
   }
 
-  // Worst 광고 개선
   const worstAds = topAds.filter(ad => ad.avg_cpl > avgCpl * 1.5);
   if (worstAds.length > 0) {
     const adNameShort = worstAds[worstAds.length - 1].ad_name.length > 20 ? worstAds[worstAds.length - 1].ad_name.substring(0, 20) + "..." : worstAds[worstAds.length - 1].ad_name;
     actions.push(`3. ⚠️ "${adNameShort}" 광고 크리에이티브 A/B 테스트 권장`);
   }
 
-  // 리드 급감 경고
   if (changes && changes.leads < -20) {
     actions.push(`4. 🔴 리드 급감 - 타겟팅 및 예산 점검 필요`);
   }
@@ -122,7 +100,6 @@ function generateRecommendedActions(current, changes, topAds) {
   return actions.slice(0, 4).join('\n');
 }
 
-// 헬퍼 함수: 광고별 성과 순위 분석 (개선 버전)
 async function getAdPerformanceRanking(clientId, weekStart, weekEnd) {
   try {
     console.log("\n📊 Analyzing ad performance ranking...");
@@ -181,7 +158,6 @@ async function getAdPerformanceRanking(clientId, weekStart, weekEnd) {
   }
 }
 
-// 텔레그램 리포트 발송 (v2)
 async function sendTelegramReport(clientId, clientName, weekStart, weekEnd) {
   try {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -194,7 +170,6 @@ async function sendTelegramReport(clientId, clientName, weekStart, weekEnd) {
 
     console.log(`\n🔍 Querying current week data for ${clientName}...`);
 
-    // 현재 주 데이터 조회
     const { data: currentData, error: currentError } = await supabase
       .from("weekly_summary")
       .select("*")
@@ -207,7 +182,6 @@ async function sendTelegramReport(clientId, clientName, weekStart, weekEnd) {
       return;
     }
 
-    // 데이터 집계
     const current = currentData.reduce((acc, d) => ({
       impressions: acc.impressions + (d.total_impressions || 0),
       clicks: acc.clicks + (d.total_clicks || 0),
@@ -218,15 +192,14 @@ async function sendTelegramReport(clientId, clientName, weekStart, weekEnd) {
     const currentCtr = current.impressions > 0 ? (current.clicks / current.impressions * 100) : 0;
     const currentCpl = current.leads > 0 ? (current.spend / current.leads) : 0;
 
-    // 이전 주 데이터 조회 (더 유연한 방식)
-    // 현재 주보다 이전의 가장 최근 주 데이터 찾기
+    // 이전 주 데이터 조회 (개선된 로직)
     const { data: prevData } = await supabase
       .from("weekly_summary")
       .select("*")
       .eq("client_id", clientId)
-      .lt("week_end", weekStart) // 현재 주 시작 이전
+      .lt("week_end", weekStart)
       .order("week_end", { ascending: false })
-      .limit(20); // 한 주의 여러 광고 데이터
+      .limit(20);
 
     console.log(`   Previous week records: ${prevData?.length || 0}`);
 
@@ -265,18 +238,14 @@ CTR: ${formatChange(changes.ctr)}
       comparisonText = "\n*첫 주차 데이터로 비교 데이터가 없습니다.*\n";
     }
 
-    // 광고별 성과 순위 분석
     const { text: adPerformanceText, topAds } = await getAdPerformanceRanking(clientId, weekStart, weekEnd);
 
-    // 인사이트 생성
     const topAd = topAds && topAds.length > 0 ? topAds[0] : null;
     const worstAd = topAds && topAds.length > 0 ? topAds[topAds.length - 1] : null;
     const insightsText = changes ? generateInsights(changes, topAd, worstAd) : "• 첫 주차 데이터입니다. 다음 주부터 트렌드 분석이 가능합니다.";
 
-    // 추천 액션 생성
     const actionsText = generateRecommendedActions(current, changes, topAds);
 
-    // 메시지 구성 (v2 - 대시보드 링크 제거)
     const message = `
 📊 [BAS] ${clientName} 주간 리포트
 📅 ${weekStart} ~ ${weekEnd}
@@ -313,7 +282,6 @@ ${actionsText ? `━━━━━━━━━━━━━━━━━━━━━
     console.log(message);
     console.log("━".repeat(50));
 
-    // Telegram API 호출
     console.log("\n📱 Sending to Telegram...");
     const response = await fetch(
       `https://api.telegram.org/bot${botToken}/sendMessage`,
@@ -324,7 +292,7 @@ ${actionsText ? `━━━━━━━━━━━━━━━━━━━━━
           chat_id: chatId,
           text: message,
           parse_mode: "Markdown",
-          disable_web_page_preview: false
+          disable_web_page_preview: true
         })
       }
     );
@@ -344,80 +312,18 @@ ${actionsText ? `━━━━━━━━━━━━━━━━━━━━━
   }
 }
 
-// 지난 주 날짜 계산 (월요일 ~ 일요일)
-function getLastWeekRange() {
-  const today = new Date();
-  const dayOfWeek = today.getDay();
-  const lastSunday = new Date(today);
-  lastSunday.setDate(today.getDate() - dayOfWeek - 7);
-  const lastMonday = new Date(lastSunday);
-  lastMonday.setDate(lastSunday.getDate() - 6);
-
-  return {
-    weekStart: lastMonday.toISOString().split('T')[0],
-    weekEnd: lastSunday.toISOString().split('T')[0]
-  };
-}
-
-// 주간 리포트 발송 작업
-async function sendWeeklyReports() {
-  console.log("\n🚀 Starting weekly report job...");
+// 즉시 실행
+(async () => {
+  console.log("\n🚀 Sending Full Telegram Report Now...");
   console.log(`   Time: ${new Date().toISOString()}`);
 
-  const { weekStart, weekEnd } = getLastWeekRange();
-  console.log(`   Report period: ${weekStart} ~ ${weekEnd}`);
+  const clientId = '79e35fc6-a817-4ccc-9d5d-9a93c1ad4515';
+  const clientName = '비즈액터스쿨';
+  const weekStart = '2025-11-10';
+  const weekEnd = '2025-11-16';
 
-  const { data: clients, error } = await supabase
-    .from("clients")
-    .select("client_id, client_name")
-    .eq("is_active", true);
+  await sendTelegramReport(clientId, clientName, weekStart, weekEnd);
 
-  if (error || !clients || clients.length === 0) {
-    console.log("⚠️ No active clients found");
-    return;
-  }
-
-  console.log(`✅ Found ${clients.length} active client(s)`);
-
-  for (const client of clients) {
-    console.log(`\n📧 Sending report for: ${client.client_name}`);
-    await sendTelegramReport(
-      client.client_id,
-      client.client_name,
-      weekStart,
-      weekEnd
-    );
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
-
-  console.log("\n🎉 All reports sent!");
-}
-
-// 메인 스케줄러
-console.log("🤖 BAS Telegram Report Scheduler v2.0 Started");
-console.log("━".repeat(50));
-
-cron.schedule('0 9 * * 1', async () => {
-  console.log("\n⏰ Scheduled task triggered");
-  await sendWeeklyReports();
-}, {
-  timezone: "Asia/Seoul"
-});
-
-console.log("✅ Cron job scheduled:");
-console.log("   - Every Monday at 09:00 (KST)");
-console.log("   - Reports last week's data (Monday ~ Sunday)");
-console.log("");
-
-// 프로세스 유지
-process.on('SIGTERM', () => {
-  console.log("\n⚠️ SIGTERM received, shutting down...");
+  console.log("\n🎉 Test completed!");
   process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.log("\n⚠️ SIGINT received, shutting down...");
-  process.exit(0);
-});
-
-console.log("Press Ctrl+C to stop the scheduler");
+})();
