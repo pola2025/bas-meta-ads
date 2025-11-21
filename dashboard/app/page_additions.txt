@@ -1,0 +1,17 @@
+
+  // Calculate current period information for DataMonitor
+  const currentPeriod = {
+    start: filters.startDate || primaryRange.from.toISOString().split('T')[0],
+    end: filters.endDate || primaryRange.to.toISOString().split('T')[0],
+    days: differenceInDays(
+      filters.endDate ? new Date(filters.endDate) : primaryRange.to,
+      filters.startDate ? new Date(filters.startDate) : primaryRange.from
+    ) + 1
+  };
+
+  // Calculate comparison period information (if exists)
+  const comparisonPeriod = comparisonDates ? {
+    start: comparisonDates.formatted.previous.split(' ~ ')[0],
+    end: comparisonDates.formatted.previous.split(' ~ ')[1],
+    days: differenceInDays(comparisonDates.to, comparisonDates.from) + 1
+  } : undefined;
