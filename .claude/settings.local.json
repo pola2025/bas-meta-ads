@@ -17,7 +17,8 @@
       "Bash(MODE=producer node index.js:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(node debug-queue.js:*)"
+      "Bash(node debug-queue.js:*)",
+      "Bash(node check-meta-token.js:*)"
     ],
     "deny": [],
     "ask": []
