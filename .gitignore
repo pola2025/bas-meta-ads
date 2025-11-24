@@ -1,5 +1,8 @@
 # 환경 변수
 .env
+.env.*
+!.env.example
+!.env.template
 .upstash.json
 streamlit-app/.env
 
@@ -8,6 +11,13 @@ archive/
 
 # Claude 로컬 설정
 .claude/settings.local.json
+
+# 작업 회고 문서 (민감 정보 포함 가능)
+작업회고-*.md
+SECURITY_*.md
+*_SECURITY.md
+GOOGLE_*.md
+*_MIGRATION.md
 
 # Node modules
 node_modules/
