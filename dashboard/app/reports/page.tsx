@@ -876,7 +876,6 @@ export default function ReportsPage() {
                   {[
                     { id: 'overview', label: '개요', icon: BarChart3 },
                     { id: 'ads', label: '광고', icon: Target },
-                    { id: 'campaigns', label: '캠페인', icon: Users },
                     { id: 'raw', label: '원본', icon: FileText }
                   ].map((tab) => (
                     <button
@@ -899,7 +898,6 @@ export default function ReportsPage() {
               <div className="p-3">
                 {activeTab === 'overview' && renderMobileOverview()}
                 {activeTab === 'ads' && renderMobileAdsTable()}
-                {activeTab === 'campaigns' && renderMobileCampaignsTable()}
                 {activeTab === 'raw' && (
                   <div className="space-y-3">
                     {selectedReport.ai_insights && (
@@ -1059,7 +1057,6 @@ export default function ReportsPage() {
                     {[
                       { id: 'overview', label: '개요', icon: BarChart3 },
                       { id: 'ads', label: '광고별', icon: Target },
-                      { id: 'campaigns', label: '캠페인별', icon: Users },
                       { id: 'raw', label: '원본', icon: FileText }
                     ].map((tab) => (
                       <button
@@ -1082,7 +1079,6 @@ export default function ReportsPage() {
                 <div className="p-6">
                   {activeTab === 'overview' && renderOverview()}
                   {activeTab === 'ads' && renderAdsTable()}
-                  {activeTab === 'campaigns' && renderCampaignsTable()}
                   {activeTab === 'raw' && (
                     <div className="space-y-4">
                       {selectedReport.ai_insights && (
