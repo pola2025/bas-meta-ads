@@ -26,7 +26,7 @@ type PeriodOption = '7d' | '14d' | '30d';
 
 export function TrendChart({ data }: TrendChartProps) {
   const [period, setPeriod] = useState<PeriodOption>('7d');
-  const [metrics, setMetrics] = useState<('leads' | 'spend' | 'cpl')[]>(['leads', 'cpl']);
+  const [metrics, setMetrics] = useState<('leads' | 'spend' | 'cpl')[]>(['leads', 'spend', 'cpl']);
 
   const periodDays = { '7d': 7, '14d': 14, '30d': 30 };
   const filteredData = data.slice(-periodDays[period]);
@@ -156,23 +156,37 @@ export function TrendChart({ data }: TrendChartProps) {
               axisLine={{ stroke: '#E5E7EB' }}
             />
 
+            {/* 왼쪽 Y축: 리드 (별도 스케일) */}
             <YAxis
-              yAxisId="left"
-              stroke="#9CA3AF"
+              yAxisId="leads"
+              stroke="#3B82F6"
               fontSize={11}
               tickLine={false}
               axisLine={false}
               tickFormatter={(val) => val.toLocaleString()}
+              domain={[0, 'auto']}
             />
 
+            {/* 오른쪽 Y축: 지출 ($) */}
             <YAxis
-              yAxisId="right"
+              yAxisId="spend"
               orientation="right"
-              stroke="#9CA3AF"
+              stroke="#8B5CF6"
               fontSize={11}
               tickLine={false}
               axisLine={false}
               tickFormatter={(val) => `$${val}`}
+            />
+
+            {/* 오른쪽 Y축 2: CPL ($) - 숨김 처리, 지출과 스케일 공유 */}
+            <YAxis
+              yAxisId="cpl"
+              orientation="right"
+              stroke="#F59E0B"
+              fontSize={11}
+              tickLine={false}
+              axisLine={false}
+              hide={true}
             />
 
             <Tooltip content={<CustomTooltip />} />
@@ -185,29 +199,19 @@ export function TrendChart({ data }: TrendChartProps) {
             />
 
             {metrics.includes('leads') && (
-              <>
-                <Area
-                  yAxisId="left"
-                  type="monotone"
-                  dataKey="leads"
-                  fill="url(#leadGradient)"
-                  stroke="transparent"
-                  name="리드"
-                />
-                <Bar
-                  yAxisId="left"
-                  dataKey="leads"
-                  fill="#3B82F6"
-                  radius={[4, 4, 0, 0]}
-                  name="리드"
-                  barSize={period === '30d' ? 8 : period === '14d' ? 16 : 24}
-                />
-              </>
+              <Bar
+                yAxisId="leads"
+                dataKey="leads"
+                fill="#3B82F6"
+                radius={[4, 4, 0, 0]}
+                name="리드"
+                barSize={period === '30d' ? 8 : period === '14d' ? 16 : 24}
+              />
             )}
 
             {metrics.includes('spend') && (
               <Area
-                yAxisId="left"
+                yAxisId="spend"
                 type="monotone"
                 dataKey="spend"
                 fill="url(#spendGradient)"
@@ -220,7 +224,7 @@ export function TrendChart({ data }: TrendChartProps) {
 
             {metrics.includes('cpl') && (
               <Line
-                yAxisId="right"
+                yAxisId="cpl"
                 type="monotone"
                 dataKey="cpl"
                 stroke="#F59E0B"
