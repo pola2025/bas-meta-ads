@@ -5,8 +5,7 @@ import { subDays, startOfDay } from 'date-fns'
 import { useState, useEffect } from 'react'
 import DateRangePicker from './DateRangePicker'
 import SimpleDateInput from './SimpleDateInput'
-import { PlatformFilter } from './PlatformFilter'
-import { CampaignFilter } from './CampaignFilter'
+import { ChevronDown, ChevronUp, Filter } from 'lucide-react'
 
 type DateInputMode = 'picker' | 'simple'
 type ComparisonMode = 'none' | 'weekly' | 'monthly'
@@ -18,6 +17,9 @@ export function FilterBar() {
 
   // 날짜 입력 모드 상태
   const [dateInputMode, setDateInputMode] = useState<DateInputMode>('picker')
+
+  // 모바일에서 필터 펼침/접힘
+  const [isExpanded, setIsExpanded] = useState(false)
 
   // 비교 모드 상태 - URL에서 초기화
   const compareParam = searchParams.get('compare') as ComparisonMode | null
@@ -72,8 +74,6 @@ export function FilterBar() {
   // URL에서 필터 값 읽기
   const startDate = searchParams.get('start')
   const endDate = searchParams.get('end')
-  const platforms = searchParams.get('platforms')?.split(',').filter(Boolean) || []
-  const campaigns = searchParams.get('campaigns')?.split(',').filter(Boolean) || []
 
   // 날짜 범위를 Date 객체로 변환 (URL에 값이 없으면 기본값 사용)
   const dateRange = {
@@ -145,99 +145,116 @@ export function FilterBar() {
   const activeFiltersCount = [
     startDate && startDate !== defaultStart.toISOString().split('T')[0],
     endDate && endDate !== today.toISOString().split('T')[0],
-    platforms.length > 0,
-    campaigns.length > 0,
     comparisonMode !== 'none'
   ].filter(Boolean).length
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow space-y-4">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">필터</h2>
-        {activeFiltersCount > 0 && (
-          <button
-            onClick={resetFilters}
-            className="text-sm text-blue-600 hover:text-blue-800 transition-colors font-medium"
-            aria-label="필터 초기화"
-          >
-            초기화 ({activeFiltersCount})
+    <div className="bg-white p-3 sm:p-6 rounded-lg shadow space-y-3 sm:space-y-4">
+      {/* 헤더 - 모바일에서 터치로 펼침/접힘 */}
+      <div
+        className="flex items-center justify-between cursor-pointer sm:cursor-default"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-gray-500 sm:hidden" />
+          <h2 className="text-sm sm:text-lg font-semibold text-gray-800">필터</h2>
+          {activeFiltersCount > 0 && (
+            <span className="px-1.5 py-0.5 text-xs sm:text-xs bg-blue-100 text-blue-700 rounded-full">
+              {activeFiltersCount}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {activeFiltersCount > 0 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                resetFilters()
+              }}
+              className="text-xs sm:text-sm text-blue-600 hover:text-blue-800 transition-colors font-medium"
+              aria-label="필터 초기화"
+            >
+              초기화
+            </button>
+          )}
+          <button className="sm:hidden p-1">
+            {isExpanded ? (
+              <ChevronUp className="w-4 h-4 text-gray-500" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-gray-500" />
+            )}
           </button>
-        )}
+        </div>
       </div>
 
-      {/* 날짜 입력 모드 선택 */}
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => setDateInputMode('picker')}
-          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-            dateInputMode === 'picker'
-              ? 'bg-blue-500 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          캘린더 선택
-        </button>
-        <button
-          onClick={() => setDateInputMode('simple')}
-          className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-            dateInputMode === 'simple'
-              ? 'bg-blue-500 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          직접 입력
-        </button>
-      </div>
-
-      {/* 비교 모드 선택 */}
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          비교 모드
-        </label>
-        <div className="flex gap-2">
+      {/* 필터 내용 - 모바일에서 접힘/펼침 가능 */}
+      <div className={`space-y-3 sm:space-y-4 ${isExpanded ? 'block' : 'hidden sm:block'}`}>
+        {/* 날짜 입력 모드 선택 */}
+        <div className="flex gap-1 sm:gap-2">
           <button
-            onClick={() => handleComparisonModeChange('none')}
-            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-              comparisonMode === 'none'
+            onClick={() => setDateInputMode('picker')}
+            className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-md transition-colors ${
+              dateInputMode === 'picker'
                 ? 'bg-blue-500 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            비교 없음
+            캘린더
           </button>
           <button
-            onClick={() => handleComparisonModeChange('weekly')}
-            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-              comparisonMode === 'weekly'
-                ? 'bg-green-500 text-white'
+            onClick={() => setDateInputMode('simple')}
+            className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-md transition-colors ${
+              dateInputMode === 'simple'
+                ? 'bg-blue-500 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            주간 비교
-          </button>
-          <button
-            onClick={() => handleComparisonModeChange('monthly')}
-            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-              comparisonMode === 'monthly'
-                ? 'bg-purple-500 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            월간 비교
+            직접 입력
           </button>
         </div>
-        {comparisonMode !== 'none' && (
-          <p className="mt-2 text-xs text-gray-600">
-            {comparisonMode === 'weekly' && '선택한 기간과 이전 주를 비교합니다.'}
-            {comparisonMode === 'monthly' && '선택한 기간과 이전 월을 비교합니다.'}
-          </p>
-        )}
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* 비교 모드 선택 */}
+        <div>
+          <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+            비교 모드
+          </label>
+          <div className="flex flex-wrap gap-1 sm:gap-2">
+            <button
+              onClick={() => handleComparisonModeChange('none')}
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-md transition-colors ${
+                comparisonMode === 'none'
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              없음
+            </button>
+            <button
+              onClick={() => handleComparisonModeChange('weekly')}
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-md transition-colors ${
+                comparisonMode === 'weekly'
+                  ? 'bg-green-500 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              주간
+            </button>
+            <button
+              onClick={() => handleComparisonModeChange('monthly')}
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-md transition-colors ${
+                comparisonMode === 'monthly'
+                  ? 'bg-purple-500 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              월간
+            </button>
+          </div>
+        </div>
+
         {/* 날짜 범위 선택 */}
-        <div className="lg:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+        <div>
+          <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
             날짜 범위
           </label>
           {dateInputMode === 'picker' ? (
@@ -253,36 +270,14 @@ export function FilterBar() {
             />
           )}
         </div>
-
-        {/* 플랫폼 필터 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            플랫폼
-          </label>
-          <PlatformFilter
-            value={platforms}
-            onChange={(selected) => updateFilters('platforms', selected)}
-          />
-        </div>
-
-        {/* 캠페인 필터 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            캠페인
-          </label>
-          <CampaignFilter
-            value={campaigns}
-            onChange={(selected) => updateFilters('campaigns', selected)}
-          />
-        </div>
       </div>
 
-      {/* 활성화된 필터 태그 표시 */}
+      {/* 활성화된 필터 태그 표시 - 모바일에서도 항상 표시 */}
       {activeFiltersCount > 0 && (
-        <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-200">
+        <div className="flex flex-wrap gap-1.5 sm:gap-2 pt-3 sm:pt-4 border-t border-gray-200">
           {comparisonMode !== 'none' && (
-            <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 text-sm rounded-full">
-              {comparisonMode === 'weekly' ? '주간 비교' : '월간 비교'}
+            <span className="inline-flex items-center gap-1 px-2 sm:px-3 py-0.5 sm:py-1 bg-purple-100 text-purple-700 text-xs sm:text-sm rounded-full">
+              {comparisonMode === 'weekly' ? '주간' : '월간'}
               <button
                 onClick={() => handleComparisonModeChange('none')}
                 className="hover:opacity-70"
@@ -292,60 +287,11 @@ export function FilterBar() {
               </button>
             </span>
           )}
-          {startDate && startDate !== defaultStart.toISOString().split('T')[0] && (
-            <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600/10 text-blue-600 text-sm rounded-full">
-              시작: {startDate}
-              <button
-                onClick={() => updateFilters('start', '')}
-                className="hover:text-blue-800"
-                aria-label="시작일 제거"
-              >
-                ×
-              </button>
+          {startDate && (
+            <span className="inline-flex items-center gap-1 px-2 sm:px-3 py-0.5 sm:py-1 bg-blue-100 text-blue-700 text-xs sm:text-sm rounded-full">
+              {startDate}~{endDate}
             </span>
           )}
-          {endDate && endDate !== today.toISOString().split('T')[0] && (
-            <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600/10 text-blue-600 text-sm rounded-full">
-              종료: {endDate}
-              <button
-                onClick={() => updateFilters('end', '')}
-                className="hover:text-blue-800"
-                aria-label="종료일 제거"
-              >
-                ×
-              </button>
-            </span>
-          )}
-          {platforms.map((platform) => (
-            <span
-              key={platform}
-              className="inline-flex items-center gap-1 px-3 py-1 bg-accent/10 text-accent text-sm rounded-full"
-            >
-              {platform}
-              <button
-                onClick={() => updateFilters('platforms', platforms.filter(p => p !== platform))}
-                className="hover:opacity-70"
-                aria-label={`${platform} 플랫폼 제거`}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-          {campaigns.map((campaign) => (
-            <span
-              key={campaign}
-              className="inline-flex items-center gap-1 px-3 py-1 bg-green-600/10 text-green-600 text-sm rounded-full"
-            >
-              {campaign}
-              <button
-                onClick={() => updateFilters('campaigns', campaigns.filter(c => c !== campaign))}
-                className="hover:opacity-70"
-                aria-label={`${campaign} 캠페인 제거`}
-              >
-                ×
-              </button>
-            </span>
-          ))}
         </div>
       )}
     </div>

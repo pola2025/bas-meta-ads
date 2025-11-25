@@ -7,9 +7,10 @@ import { ExportData } from '@/lib/excelExport'
 interface AIInsightsPanelProps {
   data: ExportData
   reportType?: 'weekly' | 'monthly' | 'custom'
+  isAdmin?: boolean  // 관리자 모드 여부 (클라이언트는 조회만 가능)
 }
 
-export function AIInsightsPanel({ data, reportType = 'custom' }: AIInsightsPanelProps) {
+export function AIInsightsPanel({ data, reportType = 'custom', isAdmin = false }: AIInsightsPanelProps) {
   const [insights, setInsights] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -55,35 +56,38 @@ export function AIInsightsPanel({ data, reportType = 'custom' }: AIInsightsPanel
           <h3 className="text-lg font-semibold text-gray-800">AI 인사이트</h3>
         </div>
 
-        <button
-          onClick={generateInsights}
-          disabled={loading}
-          className={`
-            inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all
-            ${loading
-              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              : 'bg-purple-600 text-white hover:bg-purple-700 shadow-md hover:shadow-lg'
-            }
-          `}
-          aria-label="AI 인사이트 생성"
-        >
-          {loading ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>분석 중...</span>
-            </>
-          ) : insights ? (
-            <>
-              <RefreshCw className="w-4 h-4" />
-              <span>재생성</span>
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-4 h-4" />
-              <span>인사이트 생성</span>
-            </>
-          )}
-        </button>
+        {/* AI 생성 버튼은 관리자 모드에서만 표시 */}
+        {isAdmin && (
+          <button
+            onClick={generateInsights}
+            disabled={loading}
+            className={`
+              inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all
+              ${loading
+                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                : 'bg-purple-600 text-white hover:bg-purple-700 shadow-md hover:shadow-lg'
+              }
+            `}
+            aria-label="AI 인사이트 생성"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>분석 중...</span>
+              </>
+            ) : insights ? (
+              <>
+                <RefreshCw className="w-4 h-4" />
+                <span>재생성</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                <span>인사이트 생성</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       {error && (
@@ -103,8 +107,17 @@ export function AIInsightsPanel({ data, reportType = 'custom' }: AIInsightsPanel
       ) : !loading ? (
         <div className="text-center py-12 text-gray-500">
           <Sparkles className="w-12 h-12 mx-auto mb-3 text-purple-300" />
-          <p className="text-sm">AI 인사이트를 생성하여 데이터 기반 의사결정을 시작하세요</p>
-          <p className="text-xs mt-2">Claude AI가 현재 데이터를 분석하여 실행 가능한 제안을 제공합니다</p>
+          {isAdmin ? (
+            <>
+              <p className="text-sm">AI 인사이트를 생성하여 데이터 기반 의사결정을 시작하세요</p>
+              <p className="text-xs mt-2">Claude AI가 현재 데이터를 분석하여 실행 가능한 제안을 제공합니다</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm">AI 인사이트가 아직 생성되지 않았습니다</p>
+              <p className="text-xs mt-2">담당자에게 문의하여 분석 리포트를 요청하세요</p>
+            </>
+          )}
         </div>
       ) : (
         <div className="text-center py-12">

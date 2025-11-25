@@ -10,45 +10,22 @@ export interface Filters {
 }
 
 // 전체 일별 트렌드 (필터 없이 모든 데이터)
-export async function getAllDailyTrend(clientId?: string): Promise<DailyTrend[]> {
+export async function getAllDailyTrend(): Promise<DailyTrend[]> {
   try {
-    console.log('📈 getAllDailyTrend called - fetching ALL data, clientId:', clientId);
+    console.log('📈 getAllDailyTrend called - fetching ALL data');
 
-    // 페이지네이션으로 모든 데이터 가져오기 (Supabase 1000개 제한 우회)
-    const allData: any[] = [];
-    let offset = 0;
-    const pageSize = 1000;
-    let hasMore = true;
+    const { data, error } = await supabase
+      .from('ads_insights_daily')
+      .select('date, impressions, clicks, leads, spend')
+      .order('date', { ascending: true })
+      .range(0, 5000);
 
-    while (hasMore) {
-      let query = supabase
-        .from('ads_insights_daily')
-        .select('date, impressions, clicks, leads, spend');
-
-      if (clientId) {
-        query = query.eq('client_id', clientId);
-      }
-
-      const { data, error } = await query
-        .order('date', { ascending: true })
-        .range(offset, offset + pageSize - 1);
-
-      if (error) {
-        console.error('Error fetching all daily trend:', error);
-        return [];
-      }
-
-      if (data && data.length > 0) {
-        allData.push(...data);
-        offset += pageSize;
-        hasMore = data.length === pageSize;
-      } else {
-        hasMore = false;
-      }
+    if (error) {
+      console.error('Error fetching all daily trend:', error);
+      return [];
     }
 
-    console.log('📈 getAllDailyTrend: Total rows:', allData.length);
-    const data = allData;
+    console.log('📈 getAllDailyTrend: Total rows:', data?.length || 0);
 
     // 날짜별로 집계
     const aggregated = (data || []).reduce((acc: Record<string, DailyTrend>, row: any) => {

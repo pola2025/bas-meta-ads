@@ -46,33 +46,33 @@ function MetricComparison({ icon, label, current, previous, format, reverseColor
   };
 
   return (
-    <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+    <div className="bg-white rounded-lg p-3 sm:p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
       {/* 아이콘 & 라벨 */}
-      <div className="flex items-center gap-2 mb-4">
-        <div className="text-gray-600">{icon}</div>
-        <h3 className="text-sm font-medium text-gray-600">{label}</h3>
+      <div className="flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
+        <div className="text-gray-600 hidden sm:block">{icon}</div>
+        <h3 className="text-xs sm:text-sm font-medium text-gray-600">{label}</h3>
       </div>
 
       {/* 현재 값 (크게) */}
-      <div className="mb-3">
-        <div className="text-3xl font-bold text-gray-900">{formatValue(current)}</div>
-        <div className="text-xs text-gray-500 mt-1">현재 기간</div>
+      <div className="mb-2 sm:mb-3">
+        <div className="text-lg sm:text-3xl font-bold text-gray-900">{formatValue(current)}</div>
+        <div className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">현재 기간</div>
       </div>
 
       {/* 비교 정보 */}
-      <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-        <div className="text-sm text-gray-600">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-2 sm:pt-3 border-t border-gray-100 gap-1 sm:gap-0">
+        <div className="text-[10px] sm:text-sm text-gray-600">
           이전: {formatValue(previous)}
         </div>
-        <div className={`flex items-center gap-1 font-semibold ${
+        <div className={`flex items-center gap-0.5 sm:gap-1 font-semibold ${
           isPositive ? 'text-green-600' : 'text-red-600'
         }`}>
           {isPositive ? (
-            <ArrowUpRight className="w-4 h-4" />
+            <ArrowUpRight className="w-3 h-3 sm:w-4 sm:h-4" />
           ) : (
-            <ArrowDownRight className="w-4 h-4" />
+            <ArrowDownRight className="w-3 h-3 sm:w-4 sm:h-4" />
           )}
-          <span className="text-lg">{Math.abs(percentChange).toFixed(1)}%</span>
+          <span className="text-sm sm:text-lg">{Math.abs(percentChange).toFixed(1)}%</span>
         </div>
       </div>
     </div>
@@ -92,19 +92,19 @@ export function ComparisonSection({ current, previous, currentPeriod, previousPe
           </div>
           <h2 className="text-xl font-bold text-gray-900">{modeLabel} 비교 분석</h2>
         </div>
-        <div className="flex items-center gap-3 text-sm text-gray-600">
-          <span className="px-3 py-1 bg-white rounded-full font-medium">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-xs sm:text-sm text-gray-600">
+          <span className="px-2 sm:px-3 py-1.5 sm:py-1 bg-white rounded-lg sm:rounded-full font-medium whitespace-nowrap">
             📅 이전: {previousPeriod}
           </span>
-          <span className="text-gray-400">→</span>
-          <span className="px-3 py-1 bg-blue-600 text-white rounded-full font-medium">
+          <span className="text-gray-400 hidden sm:inline">→</span>
+          <span className="px-2 sm:px-3 py-1.5 sm:py-1 bg-blue-600 text-white rounded-lg sm:rounded-full font-medium whitespace-nowrap">
             📅 현재: {currentPeriod}
           </span>
         </div>
       </div>
 
       {/* 메트릭 그리드 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricComparison
           icon={<TrendingUp className="w-5 h-5" />}
           label="총 리드"
@@ -138,24 +138,24 @@ export function ComparisonSection({ current, previous, currentPeriod, previousPe
       </div>
 
       {/* 요약 */}
-      <div className="mt-6 p-4 bg-white/60 backdrop-blur rounded-lg">
-        <div className="flex items-start gap-3">
-          <div className="text-2xl">💡</div>
-          <div>
-            <h4 className="font-semibold text-gray-900 mb-1">AI 인사이트</h4>
-            <p className="text-sm text-gray-700">
-              {current.total_leads > previous.total_leads ? (
-                `리드가 ${((current.total_leads - previous.total_leads) / previous.total_leads * 100).toFixed(1)}% 증가했습니다. `
-              ) : (
-                `리드가 ${((previous.total_leads - current.total_leads) / previous.total_leads * 100).toFixed(1)}% 감소했습니다. `
-              )}
-              {current.avg_cpl < previous.avg_cpl ? (
-                `CPL이 개선되어 비용 효율이 높아졌습니다.`
-              ) : (
-                `CPL이 상승했습니다. 캠페인 최적화를 고려해보세요.`
-              )}
-            </p>
-          </div>
+      <div className="mt-4 sm:mt-6">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xl sm:text-2xl">💡</span>
+          <h4 className="font-semibold text-gray-900 text-sm sm:text-base">AI 인사이트</h4>
+        </div>
+        <div className="bg-white rounded-lg p-3 sm:p-4 shadow-sm">
+          <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
+            {current.total_leads > previous.total_leads ? (
+              `리드가 ${((current.total_leads - previous.total_leads) / previous.total_leads * 100).toFixed(1)}% 증가했습니다. `
+            ) : (
+              `리드가 ${((previous.total_leads - current.total_leads) / previous.total_leads * 100).toFixed(1)}% 감소했습니다. `
+            )}
+            {current.avg_cpl < previous.avg_cpl ? (
+              `CPL이 개선되어 비용 효율이 높아졌습니다.`
+            ) : (
+              `CPL이 상승했습니다. 캠페인 최적화를 고려해보세요.`
+            )}
+          </p>
         </div>
       </div>
     </div>
