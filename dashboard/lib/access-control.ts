@@ -55,10 +55,13 @@ export async function validateAccess(
 
   // 2. 클라이언트 모드 확인
   if (clientParam) {
+    // UUID 형식인지 확인 (slug와 구분)
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientParam);
+
     const { data: client } = await supabase
       .from('clients')
       .select('id, client_name, slug')
-      .eq('slug', clientParam)
+      .eq(isUUID ? 'id' : 'slug', clientParam)
       .eq('is_active', true)
       .single();
 
