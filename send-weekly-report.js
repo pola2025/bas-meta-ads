@@ -1,0 +1,664 @@
+#!/usr/bin/env node
+
+/**
+ * Weekly Report Generator with Telegram Sending
+ * 주간 리포트 생성 및 텔레그램 발송 (MarkdownV2 이스케이프 포함)
+ *
+ * 사용법:
+ *   node send-weekly-report.js
+ */
+
+require('dotenv').config();
+const { createClient } = require('@supabase/supabase-js');
+const TelegramBot = require('node-telegram-bot-api');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { notifyZeroData, sendAdminError } = require('./lib/telegram-notifier');
+const { saveWeeklyReport } = require('./lib/report-storage');
+const { spawn } = require('child_process');
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
+
+// 날짜 계산 (가장 최근 완료된 주 기준: 월~일)
+// 오늘이 11/25(화)이면 → 이번주: 11/17~23, 지난주: 11/10~16
+function getWeekDates() {
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0=일, 1=월, 2=화, ...
+
+  // 가장 최근 일요일 (이번 주 마지막 날)
+  // 오늘이 일요일(0)이면 오늘, 아니면 지난 일요일
+  const lastSunday = new Date(now);
+  lastSunday.setDate(now.getDate() - dayOfWeek);
+
+  // 이번 주 월요일 (일요일 - 6일)
+  const thisWeekStart = new Date(lastSunday);
+  thisWeekStart.setDate(lastSunday.getDate() - 6);
+
+  // 지난 주 일요일 (이번 주 월요일 - 1일)
+  const lastWeekEnd = new Date(thisWeekStart);
+  lastWeekEnd.setDate(thisWeekStart.getDate() - 1);
+
+  // 지난 주 월요일 (지난 주 일요일 - 6일)
+  const lastWeekStart = new Date(lastWeekEnd);
+  lastWeekStart.setDate(lastWeekEnd.getDate() - 6);
+
+  // 날짜 포맷팅 (YYYY-MM-DD)
+  const formatDate = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  return {
+    thisWeekStart: formatDate(thisWeekStart),
+    thisWeekEnd: formatDate(lastSunday),
+    lastWeekStart: formatDate(lastWeekStart),
+    lastWeekEnd: formatDate(lastWeekEnd)
+  };
+}
+
+// MarkdownV2 이스케이프 (CRITICAL!)
+function escapeMd(text) {
+  if (!text) return '';
+  // MarkdownV2에서 이스케이프해야 하는 모든 특수문자
+  return text.toString().replace(/[-_*[\]()~`>#+\=|{}.!]/g, '\\$&');
+}
+
+// 데이터 재수집 트리거 (Producer 호출)
+async function triggerDataRecollection(startDate, endDate) {
+  return new Promise((resolve, reject) => {
+    console.log('🔄 데이터 재수집 시작...');
+    console.log(`   기간: ${startDate} ~ ${endDate}`);
+
+    // 날짜 차이 계산
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+
+    const env = {
+      ...process.env,
+      MODE: 'producer',
+      DATA_DAYS: days.toString()
+    };
+
+    const child = spawn('node', ['index.js'], {
+      cwd: process.cwd(),
+      env,
+      stdio: 'inherit'
+    });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        console.log('✅ 데이터 재수집 요청 완료 (Worker 처리 대기 중)\n');
+        resolve(true);
+      } else {
+        console.error(`❌ 데이터 재수집 실패 (exit code: ${code})`);
+        reject(new Error(`Producer failed with code ${code}`));
+      }
+    });
+
+    child.on('error', (err) => {
+      console.error('❌ Producer 실행 오류:', err.message);
+      reject(err);
+    });
+  });
+}
+
+// 데이터 조회
+async function fetchWeeklyData(startDate, endDate) {
+  const { data, error } = await supabase
+    .from('daily_aggregates')
+    .select('*')
+    .gte('date', startDate)
+    .lte('date', endDate)
+    .order('date', { ascending: true });
+
+  if (error) {
+    console.error('❌ Error:', error.message);
+    return null;
+  }
+
+  return data;
+}
+
+// 주간 통계 계산
+function calculateWeeklySummary(data) {
+  if (!data || data.length === 0) {
+    return {
+      impressions: 0,
+      clicks: 0,
+      leads: 0,
+      spend: 0,
+      ctr: 0,
+      cpl: 0,
+      conversion_rate: 0
+    };
+  }
+
+  const totals = data.reduce((acc, row) => {
+    acc.impressions += row.impressions || 0;
+    acc.clicks += row.clicks || 0;
+    acc.leads += row.leads || 0;
+    acc.spend += parseFloat(row.spend) || 0;
+    return acc;
+  }, { impressions: 0, clicks: 0, leads: 0, spend: 0 });
+
+  const ctr = totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0;
+  const cpl = totals.leads > 0 ? totals.spend / totals.leads : 0;
+  const conversion_rate = totals.clicks > 0 ? (totals.leads / totals.clicks) * 100 : 0;
+
+  return {
+    ...totals,
+    ctr,
+    cpl,
+    conversion_rate
+  };
+}
+
+// 광고별 성과 집계
+function getAdPerformance(weekData) {
+  if (!weekData || weekData.length === 0) return [];
+
+  const adStats = {};
+
+  weekData.forEach(row => {
+    const adKey = row.ad_id || 'unknown';
+    if (!adStats[adKey]) {
+      adStats[adKey] = {
+        ad_id: row.ad_id,
+        ad_name: row.ad_name || 'Unknown Ad',
+        impressions: 0,
+        clicks: 0,
+        leads: 0,
+        spend: 0,
+        dailyPerformance: {}
+      };
+    }
+
+    adStats[adKey].impressions += row.impressions || 0;
+    adStats[adKey].clicks += row.clicks || 0;
+    adStats[adKey].leads += row.leads || 0;
+    adStats[adKey].spend += parseFloat(row.spend) || 0;
+
+    if (row.date) {
+      if (!adStats[adKey].dailyPerformance[row.date]) {
+        adStats[adKey].dailyPerformance[row.date] = { leads: 0, spend: 0 };
+      }
+      adStats[adKey].dailyPerformance[row.date].leads += row.leads || 0;
+      adStats[adKey].dailyPerformance[row.date].spend += parseFloat(row.spend) || 0;
+    }
+  });
+
+  return Object.values(adStats).map(ad => ({
+    ...ad,
+    cpl: ad.leads > 0 ? ad.spend / ad.leads : 999999,
+    ctr: ad.impressions > 0 ? (ad.clicks / ad.impressions) * 100 : 0
+  }));
+}
+
+// 캠페인별 성과 집계
+function getCampaignPerformance(weekData) {
+  if (!weekData || weekData.length === 0) return [];
+
+  const campaignStats = {};
+
+  weekData.forEach(row => {
+    const campKey = row.campaign_id || 'unknown';
+    if (!campaignStats[campKey]) {
+      campaignStats[campKey] = {
+        campaign_id: row.campaign_id,
+        campaign_name: row.campaign_name || 'Unknown Campaign',
+        spend: 0,
+        leads: 0
+      };
+    }
+
+    campaignStats[campKey].spend += parseFloat(row.spend) || 0;
+    campaignStats[campKey].leads += row.leads || 0;
+  });
+
+  const total = Object.values(campaignStats).reduce(
+    (acc, c) => ({ spend: acc.spend + c.spend, leads: acc.leads + c.leads }),
+    { spend: 0, leads: 0 }
+  );
+
+  return Object.values(campaignStats).map(camp => ({
+    ...camp,
+    cpl: camp.leads > 0 ? camp.spend / camp.leads : 999999,
+    spendPercent: total.spend > 0 ? (camp.spend / total.spend) * 100 : 0,
+    leadPercent: total.leads > 0 ? (camp.leads / total.leads) * 100 : 0
+  }));
+}
+
+// AI 인사이트 생성 (Gemini 2.0 Flash)
+async function generateAIInsights(reportData) {
+  if (!process.env.GEMINI_API_KEY) {
+    return '⚠️ Gemini API Key가 설정되지 않아 AI 인사이트를 생성할 수 없습니다.';
+  }
+
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+
+  const prompt = `
+당신은 Meta 광고 성과를 분석하는 마케팅 전문가입니다.
+다음 데이터를 분석하여 실행 가능한 인사이트를 제공해주세요.
+
+## 데이터
+
+### 주간 성과 비교
+- 지난 주: 리드 ${reportData.lastStats.leads}건, CPL $${reportData.lastStats.cpl.toFixed(2)}, CTR ${reportData.lastStats.ctr.toFixed(2)}%, 지출 $${reportData.lastStats.spend.toFixed(2)}
+- 이번 주: 리드 ${reportData.thisStats.leads}건, CPL $${reportData.thisStats.cpl.toFixed(2)}, CTR ${reportData.thisStats.ctr.toFixed(2)}%, 지출 $${reportData.thisStats.spend.toFixed(2)}
+
+### 광고별 성과 (TOP 3)
+${reportData.adPerformance.slice(0, 3).map((ad, idx) =>
+  `${idx + 1}. ${ad.ad_name}: 리드 ${ad.leads}건, CPL $${ad.cpl.toFixed(2)}, CTR ${ad.ctr.toFixed(2)}%`
+).join('\n')}
+
+### 캠페인별 성과
+${reportData.campaignPerformance.map(camp =>
+  `- ${camp.campaign_name}: 리드 ${camp.leads}건 (${camp.leadPercent.toFixed(1)}%), 지출 $${camp.spend.toFixed(2)} (${camp.spendPercent.toFixed(1)}%)`
+).join('\n')}
+
+## 요구사항
+
+다음 형식으로 응답해주세요:
+
+📊 성과 종합 분석
+[2-3문장으로 전주 대비 변화, 주요 패턴 설명]
+
+💡 핵심 인사이트 (5-7개)
+1. [인사이트 1: 구체적 수치 포함]
+2. [인사이트 2]
+...
+
+🎯 즉시 실행 가능한 액션 (3-5개)
+1. ✅ [액션 제목]
+   • [구체적 실행 방법 1]
+   • [구체적 실행 방법 2]
+
+2. 🔄 [액션 제목]
+   • [구체적 실행 방법]
+
+반드시 구체적인 수치와 실행 가능한 조언을 포함하세요.
+`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return response.text();
+  } catch (error) {
+    console.error('AI 인사이트 생성 실패:', error.message);
+    return '⚠️ AI 인사이트 생성 중 오류가 발생했습니다.';
+  }
+}
+
+// 변화율 계산
+function calculateChange(current, previous) {
+  if (!previous || previous === 0) return current > 0 ? '+100%' : '-';
+  const change = ((current - previous) / previous) * 100;
+  return `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+}
+
+// 이모지 막대 그래프 (리드 1건 = 1블럭)
+function generateEmojiBar(value) {
+  if (!value || value === 0) return '';
+  return '🟩'.repeat(Math.min(value, 10)); // 최대 10개
+}
+
+// 요일 한글
+function getDayOfWeekKr(dateString) {
+  const days = ['일', '월', '화', '수', '목', '금', '토'];
+  const date = new Date(dateString);
+  return days[date.getDay()];
+}
+
+// 텔레그램 메시지 생성 (3개로 분할)
+function generateTelegramMessages(dates, thisStats, lastStats, thisWeekData, adPerformance, campaignPerformance, aiInsights) {
+  const messages = [];
+
+  // 메시지 1: 핵심 성과 (Section 1-4)
+  let msg1 = `🤖 *Polarad AI 주간 성과 리포트*\n`;
+  msg1 += `비즈액터스쿨\n`;
+  msg1 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg1 += `📅 이번 주: ${escapeMd(dates.thisWeekStart)} \\~ ${escapeMd(dates.thisWeekEnd)}\n`;
+  msg1 += `📅 지난 주: ${escapeMd(dates.lastWeekStart)} \\~ ${escapeMd(dates.lastWeekEnd)}\n\n`;
+
+  msg1 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg1 += `📊 *주간 성과 비교*\n`;
+  msg1 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  msg1 += `노출수: ${escapeMd(lastStats.impressions.toString())} → ${escapeMd(thisStats.impressions.toString())} \\(${escapeMd(calculateChange(thisStats.impressions, lastStats.impressions))}\\)\n`;
+  msg1 += `클릭수: ${escapeMd(lastStats.clicks.toString())} → ${escapeMd(thisStats.clicks.toString())} \\(${escapeMd(calculateChange(thisStats.clicks, lastStats.clicks))}\\)\n`;
+  msg1 += `리드: ${escapeMd(lastStats.leads.toString())}건 → ${escapeMd(thisStats.leads.toString())}건 \\(${escapeMd(calculateChange(thisStats.leads, lastStats.leads))}\\)\n`;
+  msg1 += `지출: $${escapeMd(lastStats.spend.toFixed(2))} → $${escapeMd(thisStats.spend.toFixed(2))} \\(${escapeMd(calculateChange(thisStats.spend, lastStats.spend))}\\)\n`;
+  msg1 += `CPL: $${escapeMd(lastStats.cpl.toFixed(2))} → $${escapeMd(thisStats.cpl.toFixed(2))} \\(${escapeMd(calculateChange(thisStats.cpl, lastStats.cpl))}\\)\n`;
+  msg1 += `CTR: ${escapeMd(lastStats.ctr.toFixed(2))}% → ${escapeMd(thisStats.ctr.toFixed(2))}%\n`;
+  msg1 += `전환율: ${escapeMd(lastStats.conversion_rate.toFixed(2))}% → ${escapeMd(thisStats.conversion_rate.toFixed(2))}%\n\n`;
+
+  // 일별 트렌드
+  msg1 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg1 += `📅 *일별 상세 성과*\n`;
+  msg1 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+  if (thisWeekData && thisWeekData.length > 0) {
+    const dailyStats = {};
+    thisWeekData.forEach(row => {
+      if (!dailyStats[row.date]) {
+        dailyStats[row.date] = { leads: 0, spend: 0 };
+      }
+      dailyStats[row.date].leads += row.leads || 0;
+      dailyStats[row.date].spend += parseFloat(row.spend) || 0;
+    });
+
+    Object.keys(dailyStats).sort().forEach(date => {
+      const stats = dailyStats[date];
+      const cpl = stats.leads > 0 ? stats.spend / stats.leads : 0;
+      const dayKr = getDayOfWeekKr(date);
+      const dateFormatted = date.substring(5).replace('-', '/');
+      const bar = generateEmojiBar(stats.leads);
+
+      msg1 += `${dayKr} ${dateFormatted}  ${stats.leads}건 \\| ${bar}\n`;
+      msg1 += `CPL: ${stats.leads > 0 ? '$' + escapeMd(cpl.toFixed(2)) : '\\-'} │ 지출: $${escapeMd(stats.spend.toFixed(2))}\n\n`;
+    });
+  } else {
+    msg1 += `데이터 없음\n\n`;
+  }
+
+  // 광고별 성과
+  msg1 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg1 += `🏆 *Best Performing 광고 \\(TOP 5\\)*\n`;
+  msg1 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+  const adsWithLeads = adPerformance.filter(ad => ad.leads > 0);
+  const topAds = adsWithLeads.sort((a, b) => a.cpl - b.cpl).slice(0, 5);
+
+  topAds.forEach((ad, idx) => {
+    msg1 += `${idx + 1}\\. *${escapeMd(ad.ad_name)}*\n`;
+    msg1 += `   💰 지출: $${escapeMd(ad.spend.toFixed(2))}\n`;
+    msg1 += `   🎯 리드: ${ad.leads}건\n`;
+    msg1 += `   💵 CPL: $${escapeMd(ad.cpl.toFixed(2))}\n`;
+    msg1 += `   📊 CTR: ${escapeMd(ad.ctr.toFixed(2))}%\n`;
+    msg1 += `   ━━━━━━━━━━━━━━━━━━━━━━\n`;
+
+    // 일별 성과
+    const dailyDates = Object.keys(ad.dailyPerformance).sort();
+    if (dailyDates.length > 0) {
+      msg1 += `   일별 성과:\n`;
+      dailyDates.forEach(date => {
+        const daily = ad.dailyPerformance[date];
+        if (daily.leads > 0) {
+          const dailyCPL = daily.spend / daily.leads;
+          msg1 += `   • ${escapeMd(date)}: 리드 ${daily.leads}건, CPL $${escapeMd(dailyCPL.toFixed(2))}\n`;
+        }
+      });
+      msg1 += `\n`;
+    }
+  });
+
+  // WORST 2 (평균 대비 150% 이상)
+  const avgCPL = thisStats.cpl;
+  const worstAds = adsWithLeads
+    .filter(ad => ad.cpl > avgCPL * 1.5)
+    .sort((a, b) => b.cpl - a.cpl)
+    .slice(0, 2);
+
+  if (worstAds.length > 0) {
+    msg1 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    msg1 += `⚠️ *개선 필요 광고*\n`;
+    msg1 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    worstAds.forEach(ad => {
+      const excess = ((ad.cpl - avgCPL) / avgCPL) * 100;
+      msg1 += `• *${escapeMd(ad.ad_name)}*\n`;
+      msg1 += `  문제: CPL $${escapeMd(ad.cpl.toFixed(2))} \\(평균 $${escapeMd(avgCPL.toFixed(2))} 대비 \\+${escapeMd(excess.toFixed(0))}%\\)\n`;
+      msg1 += `  제안: 타겟팅 재검토 또는 소재 A/B 테스트\n\n`;
+    });
+  }
+
+  messages.push(msg1);
+
+  // 메시지 2: 캠페인 효율 & AI 인사이트 (Section 5-6)
+  let msg2 = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg2 += `💰 *캠페인별 예산 효율성*\n`;
+  msg2 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+  campaignPerformance.forEach(camp => {
+    msg2 += `*${escapeMd(camp.campaign_name)}*\n`;
+    msg2 += `• 지출: $${escapeMd(camp.spend.toFixed(2))} \\(${escapeMd(camp.spendPercent.toFixed(1))}%\\)\n`;
+    msg2 += `• 리드: ${camp.leads}건 \\(${escapeMd(camp.leadPercent.toFixed(1))}%\\)\n`;
+    msg2 += `• CPL: $${escapeMd(camp.cpl.toFixed(2))}\n`;
+
+    const efficiency = camp.leadPercent - camp.spendPercent;
+    if (efficiency > 10) {
+      msg2 += `• 평가: ✅ 효율적 \\(예산 대비 리드 비율 높음\\)\n\n`;
+    } else if (efficiency < -10) {
+      msg2 += `• 평가: ⚠️ 검토 필요 \\(예산 대비 리드 비율 낮음\\)\n\n`;
+    } else {
+      msg2 += `• 평가: 📊 보통 \\(균형적\\)\n\n`;
+    }
+  });
+
+  // 예산 재배분 제안
+  if (campaignPerformance.length >= 2) {
+    const sortedByEfficiency = [...campaignPerformance].sort(
+      (a, b) => (b.leadPercent - b.spendPercent) - (a.leadPercent - a.spendPercent)
+    );
+    const bestCamp = sortedByEfficiency[0];
+    const worstCamp = sortedByEfficiency[sortedByEfficiency.length - 1];
+
+    if (bestCamp && worstCamp && bestCamp !== worstCamp) {
+      msg2 += `💡 *예산 재배분 제안*\n`;
+      msg2 += `• ${escapeMd(bestCamp.campaign_name)} 예산 \\+20% \\(고효율\\)\n`;
+      msg2 += `• ${escapeMd(worstCamp.campaign_name)} 예산 \\-20% 또는 소재 개선\n\n`;
+    }
+  }
+
+  // AI 인사이트 섹션
+  if (aiInsights) {
+    msg2 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    msg2 += `🤖 *Polarad AI 인사이트*\n`;
+    msg2 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    msg2 += escapeMd(aiInsights);
+  }
+
+  messages.push(msg2);
+
+  // 메시지 3: 푸터 (Section 7)
+  let msg3 = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg3 += `📞 *문의하기*\n`;
+  msg3 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  msg3 += `리포트 관련 문의가 필요하시면 언제든 연락주세요\\.\n\n`;
+  msg3 += `📧 이메일: mkt@polarad\\.co\\.kr\n\n`;
+  msg3 += `🕐 *운영시간*\n`;
+  msg3 += `평일 09:00 \\~ 18:00\n`;
+  msg3 += `주말 휴무 \\(공휴일 포함\\)\n\n`;
+  msg3 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg3 += `🤖 Powered by Polarad AI\n`;
+  msg3 += `자동 생성 리포트 \\| 매주 월요일 오전 9시 발송\n`;
+
+  messages.push(msg3);
+
+  return messages;
+}
+
+// 메인 실행
+async function main() {
+  console.log('📊 주간 리포트 생성 시작...\n');
+
+  const dates = getWeekDates();
+  console.log(`📅 기간: ${dates.thisWeekStart} ~ ${dates.thisWeekEnd}\n`);
+
+  // 1. 데이터 조회
+  const [thisWeekData, lastWeekData] = await Promise.all([
+    fetchWeeklyData(dates.thisWeekStart, dates.thisWeekEnd),
+    fetchWeeklyData(dates.lastWeekStart, dates.lastWeekEnd)
+  ]);
+
+  // 2. 통계 계산
+  const thisStats = calculateWeeklySummary(thisWeekData);
+  const lastStats = calculateWeeklySummary(lastWeekData);
+
+  // 안전장치: 데이터 부족 시 사용자에게 확인 요청
+  console.log('🔍 데이터 검증 중...\n');
+  const minLeads = 1; // 최소 리드 수
+  const minSpend = 10; // 최소 지출 ($)
+
+  // 이번 주 데이터 확인
+  if (thisStats.leads === 0 || thisStats.spend === 0) {
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error('⚠️  데이터 0건 감지!');
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    console.error(`분석 기간: ${dates.thisWeekStart} ~ ${dates.thisWeekEnd}`);
+    console.error(`이번 주 리드: ${thisStats.leads}건`);
+    console.error(`이번 주 지출: $${thisStats.spend.toFixed(2)}\n`);
+    console.error('❌ 가능한 원인:');
+    console.error('  1. Meta API 데이터 수집 실패');
+    console.error('  2. daily_aggregates 테이블 저장 실패');
+    console.error('  3. 데이터 수집 스케줄러 중단');
+    console.error('  4. 실제로 광고가 진행되지 않음 (가능성 낮음)\n');
+    console.error('💡 확인 필요:');
+    console.error('  - 광고가 실제로 진행 중인가요?');
+    console.error('  - Meta Ads Manager에서 데이터가 보이나요?');
+    console.error('  - 데이터 수집 스크립트(index.js)가 실행 중인가요?\n');
+    console.error('⚠️ 발송 중단됨 - 데이터 확인 후 다시 시도해주세요.\n');
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+    // 관리자에게 자동 알림 전송
+    await notifyZeroData(
+      { start: dates.thisWeekStart, end: dates.thisWeekEnd },
+      thisStats
+    );
+
+    return;
+  }
+
+  // 지난 주 데이터 확인 - 없으면 자동 재수집 트리거
+  if (lastStats.leads === 0 || lastStats.spend === 0) {
+    console.warn('⚠️  지난 주 데이터 0건 감지!');
+    console.warn(`   기간: ${dates.lastWeekStart} ~ ${dates.lastWeekEnd}`);
+    console.warn(`   리드: ${lastStats.leads}건, 지출: $${lastStats.spend.toFixed(2)}\n`);
+
+    // 자동 재수집 옵션
+    if (process.env.AUTO_RECOLLECT === 'true') {
+      console.log('🔄 AUTO_RECOLLECT=true → 지난 주 데이터 재수집 트리거...\n');
+      try {
+        await triggerDataRecollection(dates.lastWeekStart, dates.lastWeekEnd);
+        console.warn('   → 재수집 요청됨. Worker 처리 완료 후 다시 실행해주세요.\n');
+      } catch (err) {
+        console.error('   → 재수집 실패:', err.message);
+      }
+    } else {
+      console.warn('   → 지난 주 데이터 없어 전주 대비 비교 생략됩니다.');
+      console.warn('   💡 재수집하려면: AUTO_RECOLLECT=true node send-weekly-report.js\n');
+    }
+  }
+
+  console.log(`✅ 데이터 검증 통과: 리드 ${thisStats.leads}건, 지출 $${thisStats.spend.toFixed(2)}\n`);
+
+  // 3. 광고/캠페인 성과
+  const adPerformance = getAdPerformance(thisWeekData);
+  const campaignPerformance = getCampaignPerformance(thisWeekData);
+
+  // 4. AI 인사이트 (SKIP_AI=true로 비활성화 가능)
+  let aiInsights = null;
+  if (process.env.SKIP_AI !== 'true') {
+    console.log('🤖 AI 인사이트 생성 중...');
+    aiInsights = await generateAIInsights({
+      thisStats,
+      lastStats,
+      thisWeekData,
+      adPerformance,
+      campaignPerformance
+    });
+  } else {
+    console.log('⏭️  AI 인사이트 생략 (SKIP_AI=true)');
+    aiInsights = '📊 AI 인사이트가 비활성화되었습니다.';
+  }
+
+  // 5. 텔레그램 메시지 생성
+  console.log('📝 텔레그램 메시지 생성 중...\n');
+  const messages = generateTelegramMessages(
+    dates,
+    thisStats,
+    lastStats,
+    thisWeekData,
+    adPerformance,
+    campaignPerformance,
+    aiInsights
+  );
+
+  // 6. 텔레그램 발송
+  const chatId = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHANNEL_ID;
+  if (!chatId) {
+    console.error('❌ TELEGRAM_CHAT_ID 또는 TELEGRAM_ADMIN_CHAT_ID가 설정되지 않았습니다.');
+    return;
+  }
+
+  console.log(`📤 텔레그램 발송 중... (Chat ID: ${chatId})\n`);
+
+  try {
+    for (let i = 0; i < messages.length; i++) {
+      console.log(`메시지 ${i + 1}/${messages.length} 발송 중...`);
+      await bot.sendMessage(chatId, messages[i], { parse_mode: 'MarkdownV2' });
+      console.log(`✅ 메시지 ${i + 1} 발송 완료`);
+
+      // 메시지 간 약간의 딜레이 (순서 보장)
+      if (i < messages.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    console.log('\n✅ 주간 리포트 발송 완료!\n');
+
+    // 7. DB에 리포트 저장 (구조화된 데이터 포함)
+    console.log('💾 리포트 저장 중...');
+    try {
+      // 일별 데이터 집계
+      const dailyStats = [];
+      if (thisWeekData && thisWeekData.length > 0) {
+        const dailyMap = {};
+        thisWeekData.forEach(row => {
+          if (!dailyMap[row.date]) {
+            dailyMap[row.date] = { date: row.date, leads: 0, spend: 0, impressions: 0, clicks: 0 };
+          }
+          dailyMap[row.date].leads += row.leads || 0;
+          dailyMap[row.date].spend += parseFloat(row.spend) || 0;
+          dailyMap[row.date].impressions += row.impressions || 0;
+          dailyMap[row.date].clicks += row.clicks || 0;
+        });
+        Object.keys(dailyMap).sort().forEach(date => {
+          dailyStats.push(dailyMap[date]);
+        });
+      }
+
+      await saveWeeklyReport({
+        weekStart: dates.thisWeekStart,
+        weekEnd: dates.thisWeekEnd,
+        messages,
+        thisStats,
+        prevStats: lastStats,
+        aiInsights,
+        // 구조화된 데이터
+        dailyStats,
+        adPerformance,
+        campaignPerformance
+      });
+    } catch (saveError) {
+      console.error('⚠️ 리포트 저장 실패 (발송은 완료됨):', saveError.message);
+    }
+  } catch (error) {
+    console.error('❌ 텔레그램 발송 실패:', error.message);
+    throw error;
+  }
+}
+
+// 실행
+if (require.main === module) {
+  main().catch(console.error);
+}
+
+module.exports = { main };

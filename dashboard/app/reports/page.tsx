@@ -3,7 +3,71 @@
 import { useEffect, useState } from 'react';
 import { Header } from '@/components/Header';
 import { supabase } from '@/lib/supabase';
-import { FileText, Calendar, TrendingUp, TrendingDown, Minus, ChevronRight, Filter } from 'lucide-react';
+import {
+  FileText, Calendar, TrendingUp, TrendingDown, Minus,
+  ChevronRight, Filter, BarChart3, Users, DollarSign, Target
+} from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, PieChart, Pie, Cell
+} from 'recharts';
+
+interface ReportData {
+  summary?: {
+    impressions: number;
+    clicks: number;
+    leads: number;
+    spend: number;
+    cpl: number;
+    ctr: number;
+    conversion_rate: number;
+  };
+  comparison?: {
+    prev_impressions: number;
+    prev_clicks: number;
+    prev_leads: number;
+    prev_spend: number;
+    prev_cpl: number;
+    prev_ctr: number;
+  };
+  daily_stats?: Array<{
+    date: string;
+    leads: number;
+    spend: number;
+    cpl: number;
+  }>;
+  weekly_stats?: Array<{
+    week: number;
+    label: string;
+    leads: number;
+    spend: number;
+    cpl: number;
+  }>;
+  day_of_week_stats?: Array<{
+    day: string;
+    leads: number;
+    percent: number;
+  }>;
+  ad_performance?: Array<{
+    ad_id: string;
+    ad_name: string;
+    leads: number;
+    spend: number;
+    cpl: number;
+    ctr: number;
+    spend_percent: number;
+    lead_percent: number;
+  }>;
+  campaign_performance?: Array<{
+    campaign_id: string;
+    campaign_name: string;
+    leads: number;
+    spend: number;
+    cpl: number;
+    spend_percent: number;
+    lead_percent: number;
+  }>;
+}
 
 interface Report {
   id: string;
@@ -20,13 +84,17 @@ interface Report {
   sent_at: string;
   message_text: string;
   ai_insights: string;
+  report_data: ReportData | null;
 }
+
+const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
 export default function ReportsPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'weekly' | 'monthly'>('all');
+  const [activeTab, setActiveTab] = useState<'overview' | 'ads' | 'campaigns' | 'raw'>('overview');
 
   useEffect(() => {
     fetchReports();
@@ -86,13 +154,235 @@ export default function ReportsPage() {
     return 'text-gray-500';
   }
 
-  // 마크다운 이스케이프 제거 (텔레그램 MarkdownV2 → 일반 텍스트)
   function cleanMarkdown(text: string) {
     if (!text) return '';
     return text
       .replace(/\\([_*[\]()~`>#+\-=|{}.!])/g, '$1')
       .replace(/━+/g, '─'.repeat(30))
       .replace(/\n{3,}/g, '\n\n');
+  }
+
+  // 차트/테이블 데이터 렌더링
+  function renderOverview() {
+    if (!selectedReport?.report_data) {
+      return (
+        <div className="text-center text-gray-500 py-8">
+          구조화된 데이터가 없습니다. (기존 리포트)
+        </div>
+      );
+    }
+
+    const data = selectedReport.report_data;
+    const isMonthly = selectedReport.report_type === 'monthly';
+
+    // 트렌드 데이터
+    const trendData = isMonthly
+      ? (data.weekly_stats || []).map(w => ({
+          name: `W${w.week}`,
+          leads: w.leads,
+          spend: w.spend,
+          cpl: w.cpl
+        }))
+      : (data.daily_stats || []).map(d => ({
+          name: d.date.substring(5),
+          leads: d.leads,
+          spend: d.spend,
+          cpl: d.cpl
+        }));
+
+    // 요일별 데이터 (월간만)
+    const dayData = data.day_of_week_stats || [];
+
+    return (
+      <div className="space-y-6">
+        {/* 트렌드 차트 */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <h4 className="text-sm font-semibold text-gray-700 mb-4">
+            {isMonthly ? '주별 트렌드' : '일별 트렌드'}
+          </h4>
+          {trendData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={trendData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} />
+                <Tooltip
+                  formatter={(value: number, name: string) => {
+                    if (name === 'spend' || name === 'cpl') return [`$${value.toFixed(2)}`, name === 'spend' ? '지출' : 'CPL'];
+                    return [value, '리드'];
+                  }}
+                />
+                <Bar yAxisId="left" dataKey="leads" fill="#3B82F6" name="리드" />
+                <Line yAxisId="right" type="monotone" dataKey="cpl" stroke="#EF4444" name="CPL" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="text-center text-gray-400 py-8">데이터 없음</div>
+          )}
+        </div>
+
+        {/* 요일별 분포 (월간만) */}
+        {isMonthly && dayData.length > 0 && (
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <h4 className="text-sm font-semibold text-gray-700 mb-4">요일별 리드 분포</h4>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={dayData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" tick={{ fontSize: 12 }} />
+                <YAxis dataKey="day" type="category" tick={{ fontSize: 12 }} width={30} />
+                <Tooltip formatter={(value: number) => [`${value}건`, '리드']} />
+                <Bar dataKey="leads" fill="#10B981" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderAdsTable() {
+    const ads = selectedReport?.report_data?.ad_performance || [];
+
+    if (ads.length === 0) {
+      return <div className="text-center text-gray-500 py-8">광고 데이터가 없습니다.</div>;
+    }
+
+    return (
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">광고명</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">리드</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">지출</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">CPL</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">CTR</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">효율</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {ads.sort((a, b) => a.cpl - b.cpl).map((ad, idx) => {
+              const efficiency = ad.lead_percent - ad.spend_percent;
+              return (
+                <tr key={ad.ad_id || idx} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm text-gray-900 max-w-[200px] truncate">
+                    {ad.ad_name}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right text-gray-900 font-medium">
+                    {ad.leads}건
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right text-gray-600">
+                    ${ad.spend.toFixed(2)}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right">
+                    <span className={ad.cpl < (selectedReport?.avg_cpl || 0) ? 'text-green-600' : 'text-red-600'}>
+                      ${ad.cpl.toFixed(2)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right text-gray-600">
+                    {ad.ctr.toFixed(2)}%
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right">
+                    <span className={`px-2 py-1 rounded text-xs ${
+                      efficiency > 5 ? 'bg-green-100 text-green-700' :
+                      efficiency < -5 ? 'bg-red-100 text-red-700' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>
+                      {efficiency > 5 ? '효율적' : efficiency < -5 ? '검토필요' : '보통'}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  function renderCampaignsTable() {
+    const campaigns = selectedReport?.report_data?.campaign_performance || [];
+
+    if (campaigns.length === 0) {
+      return <div className="text-center text-gray-500 py-8">캠페인 데이터가 없습니다.</div>;
+    }
+
+    return (
+      <div className="space-y-4">
+        {/* 파이 차트 */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <h4 className="text-sm font-semibold text-gray-700 mb-4">캠페인별 지출 비중</h4>
+          <ResponsiveContainer width="100%" height={200}>
+            <PieChart>
+              <Pie
+                data={campaigns}
+                dataKey="spend"
+                nameKey="campaign_name"
+                cx="50%"
+                cy="50%"
+                outerRadius={70}
+                label={({ name, percent }) => `${name.substring(0, 10)}... ${(percent * 100).toFixed(0)}%`}
+                labelLine={false}
+              >
+                {campaigns.map((_, idx) => (
+                  <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value: number) => [`$${value.toFixed(2)}`, '지출']} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* 테이블 */}
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">캠페인명</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">리드</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">지출</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">CPL</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">효율</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {campaigns.map((camp, idx) => {
+                const efficiency = camp.lead_percent - camp.spend_percent;
+                return (
+                  <tr key={camp.campaign_id || idx} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                        {camp.campaign_name}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-900 font-medium">
+                      {camp.leads}건 ({camp.lead_percent.toFixed(1)}%)
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-600">
+                      ${camp.spend.toFixed(2)} ({camp.spend_percent.toFixed(1)}%)
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-900">
+                      ${camp.cpl.toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right">
+                      <span className={`px-2 py-1 rounded text-xs ${
+                        efficiency > 10 ? 'bg-green-100 text-green-700' :
+                        efficiency < -10 ? 'bg-red-100 text-red-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {efficiency > 10 ? '✅ 효율적' : efficiency < -10 ? '⚠️ 검토필요' : '📊 보통'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -145,19 +435,15 @@ export default function ReportsPage() {
               </div>
 
               {loading ? (
-                <div className="p-8 text-center text-gray-500">
-                  로딩 중...
-                </div>
+                <div className="p-8 text-center text-gray-500">로딩 중...</div>
               ) : reports.length === 0 ? (
-                <div className="p-8 text-center text-gray-500">
-                  저장된 리포트가 없습니다
-                </div>
+                <div className="p-8 text-center text-gray-500">저장된 리포트가 없습니다</div>
               ) : (
                 <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
                   {reports.map((report) => (
                     <button
                       key={report.id}
-                      onClick={() => setSelectedReport(report)}
+                      onClick={() => { setSelectedReport(report); setActiveTab('overview'); }}
                       className={`w-full p-4 text-left hover:bg-gray-50 transition-colors ${
                         selectedReport?.id === report.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
                       }`}
@@ -172,7 +458,11 @@ export default function ReportsPage() {
                             }`}>
                               {report.report_type === 'weekly' ? '주간' : '월간'}
                             </span>
-                            <Calendar className="w-3 h-3 text-gray-400" />
+                            {report.report_data && (
+                              <span className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">
+                                차트
+                              </span>
+                            )}
                           </div>
                           <p className="text-sm font-medium text-gray-900">
                             {formatPeriod(report.week_start, report.week_end, report.report_type)}
@@ -216,74 +506,107 @@ export default function ReportsPage() {
 
                 {/* KPI 요약 */}
                 <div className="p-6 border-b border-gray-200">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-4">핵심 지표</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <p className="text-xs text-gray-500 mb-1">리드</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        {selectedReport.total_leads}건
-                      </p>
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Users className="w-4 h-4 text-blue-600" />
+                        <p className="text-xs text-gray-500">리드</p>
+                      </div>
+                      <p className="text-xl font-bold text-gray-900">{selectedReport.total_leads}건</p>
                       <div className={`flex items-center gap-1 mt-1 text-xs ${getTrendColor(selectedReport.leads_change)}`}>
                         {getTrendIcon(selectedReport.leads_change)}
                         <span>{selectedReport.leads_change?.toFixed(1)}%</span>
                       </div>
                     </div>
 
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <p className="text-xs text-gray-500 mb-1">지출</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        ${selectedReport.total_spend?.toFixed(2)}
-                      </p>
+                    <div className="bg-green-50 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <DollarSign className="w-4 h-4 text-green-600" />
+                        <p className="text-xs text-gray-500">지출</p>
+                      </div>
+                      <p className="text-xl font-bold text-gray-900">${selectedReport.total_spend?.toFixed(2)}</p>
                       <div className={`flex items-center gap-1 mt-1 text-xs ${getTrendColor(selectedReport.spend_change, true)}`}>
                         {getTrendIcon(-selectedReport.spend_change)}
                         <span>{selectedReport.spend_change?.toFixed(1)}%</span>
                       </div>
                     </div>
 
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <p className="text-xs text-gray-500 mb-1">CPL</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        ${selectedReport.avg_cpl?.toFixed(2)}
-                      </p>
+                    <div className="bg-orange-50 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Target className="w-4 h-4 text-orange-600" />
+                        <p className="text-xs text-gray-500">CPL</p>
+                      </div>
+                      <p className="text-xl font-bold text-gray-900">${selectedReport.avg_cpl?.toFixed(2)}</p>
                       <div className={`flex items-center gap-1 mt-1 text-xs ${getTrendColor(selectedReport.cpl_change, true)}`}>
                         {getTrendIcon(-selectedReport.cpl_change)}
                         <span>{selectedReport.cpl_change?.toFixed(1)}%</span>
                       </div>
                     </div>
 
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <p className="text-xs text-gray-500 mb-1">CTR</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        {selectedReport.avg_ctr?.toFixed(2)}%
-                      </p>
+                    <div className="bg-purple-50 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <BarChart3 className="w-4 h-4 text-purple-600" />
+                        <p className="text-xs text-gray-500">CTR</p>
+                      </div>
+                      <p className="text-xl font-bold text-gray-900">{selectedReport.avg_ctr?.toFixed(2)}%</p>
                     </div>
                   </div>
                 </div>
 
-                {/* AI 인사이트 */}
-                {selectedReport.ai_insights && (
-                  <div className="p-6 border-b border-gray-200">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-4">🤖 AI 인사이트</h3>
-                    <div className="bg-blue-50 rounded-lg p-4 text-sm text-gray-700 whitespace-pre-wrap">
-                      {cleanMarkdown(selectedReport.ai_insights)}
-                    </div>
+                {/* 탭 네비게이션 */}
+                <div className="border-b border-gray-200">
+                  <div className="flex">
+                    {[
+                      { id: 'overview', label: '개요', icon: BarChart3 },
+                      { id: 'ads', label: '광고별', icon: Target },
+                      { id: 'campaigns', label: '캠페인별', icon: Users },
+                      { id: 'raw', label: '원본', icon: FileText }
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id as any)}
+                        className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                          activeTab === tab.id
+                            ? 'border-blue-600 text-blue-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        <tab.icon className="w-4 h-4" />
+                        {tab.label}
+                      </button>
+                    ))}
                   </div>
-                )}
+                </div>
 
-                {/* 전체 메시지 */}
+                {/* 탭 콘텐츠 */}
                 <div className="p-6">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-4">📝 전체 리포트</h3>
-                  <div className="bg-gray-900 rounded-lg p-6 text-sm text-gray-100 whitespace-pre-wrap font-mono overflow-x-auto max-h-[500px] overflow-y-auto">
-                    {cleanMarkdown(selectedReport.message_text)}
-                  </div>
+                  {activeTab === 'overview' && renderOverview()}
+                  {activeTab === 'ads' && renderAdsTable()}
+                  {activeTab === 'campaigns' && renderCampaignsTable()}
+                  {activeTab === 'raw' && (
+                    <div className="space-y-4">
+                      {selectedReport.ai_insights && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-gray-700 mb-2">🤖 AI 인사이트</h4>
+                          <div className="bg-blue-50 rounded-lg p-4 text-sm text-gray-700 whitespace-pre-wrap">
+                            {cleanMarkdown(selectedReport.ai_insights)}
+                          </div>
+                        </div>
+                      )}
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">📝 전체 메시지</h4>
+                        <div className="bg-gray-900 rounded-lg p-4 text-sm text-gray-100 whitespace-pre-wrap font-mono overflow-x-auto max-h-[400px] overflow-y-auto">
+                          {cleanMarkdown(selectedReport.message_text)}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
                 <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">
-                  왼쪽 목록에서 리포트를 선택하세요
-                </p>
+                <p className="text-gray-500">왼쪽 목록에서 리포트를 선택하세요</p>
               </div>
             )}
           </div>
