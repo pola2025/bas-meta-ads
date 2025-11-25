@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { BarChart3, Settings } from 'lucide-react';
+import { BarChart3, Settings, FileText } from 'lucide-react';
 
 export function Header() {
   return (
@@ -19,6 +19,15 @@ export function Header() {
           </Link>
 
           <div className="flex items-center gap-4">
+            <Link
+              href="/reports"
+              className="inline-flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-blue-600 hover:bg-gray-50 rounded-lg transition-colors"
+              aria-label="리포트"
+            >
+              <FileText className="w-5 h-5" />
+              <span className="text-sm font-medium">리포트</span>
+            </Link>
+
             <Link
               href="/settings"
               className="inline-flex items-center gap-2 px-4 py-2 text-gray-700 hover:text-blue-600 hover:bg-gray-50 rounded-lg transition-colors"
