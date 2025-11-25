@@ -318,12 +318,12 @@ function getDayOfWeekKr(dateString) {
 }
 
 // 텔레그램 메시지 생성 (3개로 분할)
-function generateTelegramMessages(dates, thisStats, lastStats, thisWeekData, adPerformance, campaignPerformance, aiInsights) {
+function generateTelegramMessages(dates, thisStats, lastStats, thisWeekData, adPerformance, campaignPerformance, aiInsights, clientInfo = { name: '비즈액터스쿨', slug: 'bas-k92m7x' }) {
   const messages = [];
 
   // 메시지 1: 핵심 성과 (Section 1-4)
   let msg1 = `🤖 *Polarad AI 주간 성과 리포트*\n`;
-  msg1 += `비즈액터스쿨\n`;
+  msg1 += `${escapeMd(clientInfo.name)}\n`;
   msg1 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   msg1 += `📅 이번 주: ${escapeMd(dates.thisWeekStart)} \\~ ${escapeMd(dates.thisWeekEnd)}\n`;
   msg1 += `📅 지난 주: ${escapeMd(dates.lastWeekStart)} \\~ ${escapeMd(dates.lastWeekEnd)}\n\n`;
@@ -468,7 +468,17 @@ function generateTelegramMessages(dates, thisStats, lastStats, thisWeekData, adP
   messages.push(msg2);
 
   // 메시지 3: 푸터 (Section 7)
+  // 대시보드 링크 생성
+  const dashboardUrl = process.env.DASHBOARD_URL || 'https://bas-meta-dashboard.vercel.app';
+  const reportUrl = `${dashboardUrl}/reports?client=${clientInfo.slug}`;
+
   let msg3 = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg3 += `📊 *상세 리포트 보기*\n`;
+  msg3 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  msg3 += `더 자세한 분석은 대시보드에서 확인하세요\\:\n`;
+  msg3 += `${escapeMd(reportUrl)}\n\n`;
+
+  msg3 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   msg3 += `📞 *문의하기*\n`;
   msg3 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
   msg3 += `리포트 관련 문의가 필요하시면 언제든 연락주세요\\.\n\n`;
@@ -563,6 +573,18 @@ async function main() {
   const adPerformance = getAdPerformance(thisWeekData);
   const campaignPerformance = getCampaignPerformance(thisWeekData);
 
+  // 3.5 클라이언트 정보 조회 (대시보드 링크용)
+  // TODO: 멀티클라이언트 지원 시 클라이언트 ID를 동적으로 가져오도록 수정
+  const { data: clientData } = await supabase
+    .from('clients')
+    .select('name, slug')
+    .eq('is_active', true)
+    .limit(1)
+    .single();
+
+  const clientInfo = clientData || { name: '비즈액터스쿨', slug: 'bas-k92m7x' };
+  console.log(`📋 클라이언트: ${clientInfo.name} (${clientInfo.slug})\n`);
+
   // 4. AI 인사이트 (SKIP_AI=true로 비활성화 가능)
   let aiInsights = null;
   if (process.env.SKIP_AI !== 'true') {
@@ -588,7 +610,8 @@ async function main() {
     thisWeekData,
     adPerformance,
     campaignPerformance,
-    aiInsights
+    aiInsights,
+    clientInfo
   );
 
   // 6. 텔레그램 발송

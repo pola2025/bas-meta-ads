@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { supabase } from '@/lib/supabase';
+import { validateAccess, AccessMode, ClientInfo } from '@/lib/access-control';
 import {
-  FileText, Calendar, TrendingUp, TrendingDown, Minus,
-  ChevronRight, Filter, BarChart3, Users, DollarSign, Target
+  FileText, TrendingUp, TrendingDown, Minus,
+  ChevronRight, Filter, BarChart3, Users, DollarSign, Target, Lock
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -71,6 +73,7 @@ interface ReportData {
 
 interface Report {
   id: string;
+  client_id: string;
   report_type: 'weekly' | 'monthly';
   week_start: string;
   week_end: string;
@@ -90,15 +93,52 @@ interface Report {
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
 export default function ReportsPage() {
+  const searchParams = useSearchParams();
+
+  // 접근 제어 상태
+  const [accessMode, setAccessMode] = useState<AccessMode>('denied');
+  const [clientId, setClientId] = useState<string | null>(null);
+  const [clientName, setClientName] = useState<string | null>(null);
+  const [allClients, setAllClients] = useState<ClientInfo[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [accessLoading, setAccessLoading] = useState(true);
+
+  // 리포트 상태
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'weekly' | 'monthly'>('all');
   const [activeTab, setActiveTab] = useState<'overview' | 'ads' | 'campaigns' | 'raw'>('overview');
 
+  // 접근 제어 검증
   useEffect(() => {
-    fetchReports();
-  }, [filterType]);
+    async function checkAccess() {
+      setAccessLoading(true);
+      const adminParam = searchParams.get('admin');
+      const clientParam = searchParams.get('client');
+
+      const result = await validateAccess(adminParam, clientParam);
+
+      setAccessMode(result.mode);
+      setClientId(result.clientId);
+      setClientName(result.clientName);
+
+      if (result.mode === 'admin' && result.allClients) {
+        setAllClients(result.allClients);
+      }
+
+      setAccessLoading(false);
+    }
+
+    checkAccess();
+  }, [searchParams]);
+
+  // 리포트 조회
+  useEffect(() => {
+    if (accessMode !== 'denied' && !accessLoading) {
+      fetchReports();
+    }
+  }, [filterType, accessMode, accessLoading, clientId, selectedClientId]);
 
   async function fetchReports() {
     setLoading(true);
@@ -109,6 +149,17 @@ export default function ReportsPage() {
         .order('week_start', { ascending: false })
         .limit(50);
 
+      // 클라이언트 모드: 해당 클라이언트만
+      if (accessMode === 'client' && clientId) {
+        query = query.eq('client_id', clientId);
+      }
+
+      // 관리자 모드: 선택된 클라이언트 필터 (선택된 경우)
+      if (accessMode === 'admin' && selectedClientId) {
+        query = query.eq('client_id', selectedClientId);
+      }
+
+      // 리포트 타입 필터
       if (filterType !== 'all') {
         query = query.eq('report_type', filterType);
       }
@@ -235,6 +286,18 @@ export default function ReportsPage() {
                 <Bar dataKey="leads" fill="#10B981" />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* AI 인사이트 섹션 (개요 탭) */}
+        {selectedReport?.ai_insights && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-4">
+            <h4 className="text-sm font-semibold text-blue-800 mb-3 flex items-center gap-2">
+              <span>🤖</span> AI 인사이트
+            </h4>
+            <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+              {cleanMarkdown(selectedReport.ai_insights)}
+            </div>
           </div>
         )}
       </div>
@@ -372,7 +435,7 @@ export default function ReportsPage() {
                         efficiency < -10 ? 'bg-red-100 text-red-700' :
                         'bg-gray-100 text-gray-700'
                       }`}>
-                        {efficiency > 10 ? '✅ 효율적' : efficiency < -10 ? '⚠️ 검토필요' : '📊 보통'}
+                        {efficiency > 10 ? '효율적' : efficiency < -10 ? '검토필요' : '보통'}
                       </span>
                     </td>
                   </tr>
@@ -385,11 +448,71 @@ export default function ReportsPage() {
     );
   }
 
+  // 접근 로딩 중
+  if (accessLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">접근 권한 확인 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 접근 거부 화면
+  if (accessMode === 'denied') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md mx-auto px-4">
+          <div className="bg-white rounded-xl shadow-lg p-8">
+            <Lock className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">접근 권한 없음</h1>
+            <p className="text-gray-600 mb-6">
+              유효한 링크를 통해 접속해주세요.<br />
+              링크가 없으시면 담당자에게 문의하세요.
+            </p>
+            <div className="text-sm text-gray-400">
+              문의: mkt@polarad.co.kr
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
+      <Header clientName={clientName} isAdmin={accessMode === 'admin'} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* 관리자/클라이언트 모드 표시 */}
+        {accessMode === 'admin' && (
+          <div className="mb-4 px-4 py-3 bg-purple-50 rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-purple-700 font-medium">🔐 관리자 모드</span>
+              <span className="text-purple-500 text-sm">모든 클라이언트 데이터 접근 가능</span>
+            </div>
+            <select
+              className="border border-purple-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              value={selectedClientId || ''}
+              onChange={(e) => setSelectedClientId(e.target.value || null)}
+            >
+              <option value="">클라이언트 선택...</option>
+              {allClients.map(c => (
+                <option key={c.id} value={c.id}>{c.client_name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {accessMode === 'client' && clientName && (
+          <div className="mb-4 px-4 py-3 bg-blue-50 rounded-lg">
+            <span className="text-blue-700 font-medium">{clientName}</span>
+            <span className="text-blue-500 ml-2">리포트</span>
+          </div>
+        )}
+
         {/* 페이지 헤더 */}
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
@@ -564,7 +687,7 @@ export default function ReportsPage() {
                     ].map((tab) => (
                       <button
                         key={tab.id}
-                        onClick={() => setActiveTab(tab.id as any)}
+                        onClick={() => setActiveTab(tab.id as typeof activeTab)}
                         className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
                           activeTab === tab.id
                             ? 'border-blue-600 text-blue-600'
