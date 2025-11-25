@@ -110,7 +110,8 @@ export default function Home() {
     startDate: searchParams.get('start'),
     endDate: searchParams.get('end'),
     platforms: searchParams.get('platforms')?.split(',').filter(Boolean),
-    campaigns: searchParams.get('campaigns')?.split(',').filter(Boolean)
+    campaigns: searchParams.get('campaigns')?.split(',').filter(Boolean),
+    clientId: clientId || undefined
   };
 
   // 기본 날짜 범위

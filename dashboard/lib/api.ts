@@ -7,6 +7,7 @@ export interface Filters {
   endDate?: string | null;
   platforms?: string[];
   campaigns?: string[];
+  clientId?: string;
 }
 
 // 전체 일별 트렌드 (필터 없이 모든 데이터)
@@ -97,6 +98,10 @@ export async function getDailyTrend(filters?: Filters): Promise<DailyTrend[]> {
       .select('date, impressions, clicks, leads, spend, ctr, cvr, cpl');
 
     // 필터 적용
+    if (filters?.clientId) {
+      console.log('✅ Applying clientId filter:', filters.clientId);
+      query = query.eq('client_id', filters.clientId);
+    }
     if (filters?.startDate) {
       console.log('✅ Applying startDate filter:', filters.startDate);
       query = query.gte('date', filters.startDate);
@@ -170,6 +175,11 @@ export async function getPlatformPerformance(filters?: Filters): Promise<Platfor
       .from('raw_data')
       .select('platform, impressions, clicks, leads, spend');
 
+    // client_id 필터 적용 (필수)
+    if (filters?.clientId) {
+      query = query.eq('client_id', filters.clientId);
+    }
+
     // 필터 적용
     if (filters?.startDate) {
       query = query.gte('date', filters.startDate);
@@ -240,6 +250,10 @@ export async function getKPISummary(filters?: Filters): Promise<KPISummary> {
       .select('impressions, clicks, leads, spend, date');
 
     // 필터 적용
+    if (filters?.clientId) {
+      console.log('✅ Applying clientId filter:', filters.clientId);
+      query = query.eq('client_id', filters.clientId);
+    }
     if (filters?.startDate) {
       console.log('✅ Applying startDate filter:', filters.startDate);
       query = query.gte('date', filters.startDate);
@@ -636,6 +650,9 @@ export async function getTopAds(filters?: Filters, limit: number = 10): Promise<
       .select('ad_name, campaign_name, platform, leads, spend, clicks, impressions');
 
     // 필터 적용
+    if (filters?.clientId) {
+      query = query.eq('client_id', filters.clientId);
+    }
     if (filters?.startDate) {
       query = query.gte('date', filters.startDate);
     }
