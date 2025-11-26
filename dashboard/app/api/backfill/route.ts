@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,6 +11,76 @@ const supabase = createClient(
 function isValidAdmin(request: NextRequest): boolean {
   const adminKey = request.headers.get('x-admin-key');
   return adminKey === process.env.NEXT_PUBLIC_ADMIN_KEY;
+}
+
+// AES-256-CBC 복호화
+function decryptToken(encryptedText: string): string | null {
+  if (!encryptedText) return null;
+
+  const key = process.env.TOKEN_ENCRYPTION_KEY;
+  if (!key || key.length !== 64) {
+    console.error('TOKEN_ENCRYPTION_KEY not set or invalid');
+    return null;
+  }
+
+  try {
+    const parts = encryptedText.split(':');
+    if (parts.length !== 2) {
+      console.error('Invalid encrypted text format');
+      return null;
+    }
+
+    const iv = Buffer.from(parts[0], 'hex');
+    const encrypted = parts[1];
+    const keyBuffer = Buffer.from(key, 'hex');
+
+    const decipher = crypto.createDecipheriv('aes-256-cbc', keyBuffer, iv);
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    return decrypted;
+  } catch (error: any) {
+    console.error('Decryption failed:', error.message);
+    return null;
+  }
+}
+
+// 클라이언트 Access Token 가져오기 (복호화 또는 Vault)
+async function getClientAccessToken(clientId: string): Promise<string | null> {
+  // 1. DB에서 암호화된 토큰 조회
+  const { data: client, error } = await supabase
+    .from('clients')
+    .select('encrypted_access_token, meta_access_token_id')
+    .eq('id', clientId)
+    .single();
+
+  if (error || !client) {
+    console.error('Failed to fetch client:', error?.message);
+    return null;
+  }
+
+  // 2. AES 암호화 토큰이 있으면 복호화
+  if (client.encrypted_access_token) {
+    const decrypted = decryptToken(client.encrypted_access_token);
+    if (decrypted) {
+      console.log('Token decrypted successfully');
+      return decrypted;
+    }
+  }
+
+  // 3. Fallback: Vault RPC 호출
+  if (client.meta_access_token_id) {
+    console.log('Falling back to Vault RPC');
+    const { data: vaultToken, error: vaultError } = await supabase.rpc('get_client_meta_token', {
+      p_client_id: clientId
+    });
+
+    if (!vaultError && vaultToken) {
+      return vaultToken.replace(/\s/g, '');
+    }
+  }
+
+  return null;
 }
 
 // Meta API에서 데이터 수집 (간단 버전)
@@ -217,10 +288,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 클라이언트 정보 확인 (토큰 포함)
+    // 클라이언트 정보 확인
     const { data: client, error: clientError } = await supabase
       .from('clients')
-      .select('id, client_name, meta_ad_account_id, meta_access_token')
+      .select('id, client_name, meta_ad_account_id')
       .eq('id', clientId)
       .single();
 
@@ -238,9 +309,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!client.meta_access_token) {
+    // 토큰 조회 (암호화된 토큰 복호화 또는 Vault)
+    const accessToken = await getClientAccessToken(clientId);
+
+    if (!accessToken) {
       return NextResponse.json(
-        { error: 'Client has no Meta Access Token configured' },
+        { error: 'Client has no Meta Access Token configured or decryption failed' },
         { status: 400 }
       );
     }
@@ -257,7 +331,7 @@ export async function POST(request: NextRequest) {
         // 1. Meta API에서 데이터 수집
         const insights = await fetchMetaAdsData(
           client.meta_ad_account_id,
-          client.meta_access_token,
+          accessToken,
           startDate,
           endDate
         );
