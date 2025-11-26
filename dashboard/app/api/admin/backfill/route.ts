@@ -66,7 +66,52 @@ function getActionValue(actions: any[], actionType: string): number {
   return action ? parseInt(action.value) || 0 : 0;
 }
 
-// Meta API 호출
+// Rate Limit 에러 타입 정의
+interface RateLimitError extends Error {
+  isRateLimit: boolean;
+  retryAfter?: number;
+}
+
+// Rate Limit 발생 시 관리자 텔레그램 알림
+async function sendRateLimitAlert(
+  clientName: string,
+  retryAfterMinutes: number,
+  errorMessage: string
+): Promise<void> {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = '-1003394139746'; // 백필 알림 전용 채널
+
+  if (!botToken) return;
+
+  const retryTime = new Date(Date.now() + retryAfterMinutes * 60 * 1000);
+  const retryTimeStr = retryTime.toLocaleTimeString('ko-KR', { hour12: false });
+
+  const message = `⚠️ **[BAS] API Rate Limit 발생**
+
+📋 클라이언트: ${clientName}
+⏱️ 재시도 예정: ${retryAfterMinutes}분 후 (${retryTimeStr})
+❌ 오류: ${errorMessage}
+
+---
+🔄 자동으로 ${retryAfterMinutes}분 후에 재시도됩니다.
+🤖 BAS Meta Ads Analytics`;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'Markdown',
+      }),
+    });
+  } catch (err) {
+    console.error('Failed to send rate limit alert:', err);
+  }
+}
+
+// Meta API 호출 (Rate Limit 감지 포함)
 async function fetchMetaInsights(
   adAccountId: string,
   accessToken: string,
@@ -97,7 +142,18 @@ async function fetchMetaInsights(
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(`Meta API Error: ${errorData.error?.message || response.statusText}`);
+      const errorCode = errorData.error?.code;
+      const errorMessage = errorData.error?.message || response.statusText;
+
+      // Rate Limit 에러 감지 (코드 4, 17, 32, 613)
+      if ([4, 17, 32, 613].includes(errorCode) || errorMessage.includes('rate limit')) {
+        const rateLimitError = new Error(`Meta API Rate Limit: ${errorMessage}`) as RateLimitError;
+        rateLimitError.isRateLimit = true;
+        rateLimitError.retryAfter = 60; // 1시간 후 재시도
+        throw rateLimitError;
+      }
+
+      throw new Error(`Meta API Error: ${errorMessage}`);
     }
 
     const resJson = await response.json();
@@ -386,19 +442,40 @@ export async function POST(request: NextRequest) {
           );
         } catch (error: any) {
           console.error('Backfill error:', error);
-          sendLog(`❌ 오류 발생: ${error.message}`, 'error');
-          sendEvent('error', { message: error.message });
 
-          // 실패 알림
-          await sendTelegramNotification(
-            client.client_name,
-            startDate,
-            endDate,
-            0,
-            0,
-            false,
-            error.message
-          );
+          // Rate Limit 에러 처리
+          if (error.isRateLimit) {
+            const retryMinutes = error.retryAfter || 60;
+            sendLog(`⚠️ API Rate Limit 발생!`, 'error');
+            sendLog(`⏱️ ${retryMinutes}분 후 자동 재시도됩니다.`, 'warning');
+
+            // Rate Limit 이벤트 (타이머 시작)
+            sendEvent('rateLimit', {
+              message: error.message,
+              retryAfterMinutes: retryMinutes,
+              retryAt: new Date(Date.now() + retryMinutes * 60 * 1000).toISOString(),
+              clientId,
+              startDate,
+              endDate,
+            });
+
+            // 관리자 텔레그램 알림
+            await sendRateLimitAlert(client.client_name, retryMinutes, error.message);
+          } else {
+            sendLog(`❌ 오류 발생: ${error.message}`, 'error');
+            sendEvent('error', { message: error.message });
+
+            // 실패 알림
+            await sendTelegramNotification(
+              client.client_name,
+              startDate,
+              endDate,
+              0,
+              0,
+              false,
+              error.message
+            );
+          }
         } finally {
           controller.close();
         }

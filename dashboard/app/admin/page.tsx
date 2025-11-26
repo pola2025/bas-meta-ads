@@ -31,6 +31,8 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronUp,
+  Timer,
+  Pause,
 } from 'lucide-react';
 
 interface ClientTargets {
@@ -107,6 +109,15 @@ interface BackfillLog {
   message: string;
 }
 
+interface RateLimitInfo {
+  isActive: boolean;
+  retryAt: string | null;
+  clientId: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  remainingSeconds: number;
+}
+
 const initialFormData = {
   client_name: '',
   email: '',
@@ -170,6 +181,17 @@ export default function AdminPage() {
   });
   const logsEndRef = useRef<HTMLDivElement>(null);
 
+  // Rate Limit 타이머 상태
+  const [rateLimit, setRateLimit] = useState<RateLimitInfo>({
+    isActive: false,
+    retryAt: null,
+    clientId: null,
+    startDate: null,
+    endDate: null,
+    remainingSeconds: 0,
+  });
+  const rateLimitTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   // 시스템 현황 펼침 상태
   const [showSystemDetails, setShowSystemDetails] = useState(false);
 
@@ -219,6 +241,134 @@ export default function AdminPage() {
       logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [backfillLogs]);
+
+  // Rate Limit 타이머 업데이트
+  useEffect(() => {
+    if (rateLimit.isActive && rateLimit.retryAt) {
+      rateLimitTimerRef.current = setInterval(() => {
+        const now = Date.now();
+        const retryTime = new Date(rateLimit.retryAt!).getTime();
+        const remaining = Math.max(0, Math.floor((retryTime - now) / 1000));
+
+        if (remaining <= 0) {
+          // 타이머 종료 - 자동 재시도
+          if (rateLimitTimerRef.current) {
+            clearInterval(rateLimitTimerRef.current);
+          }
+          setRateLimit((prev) => ({ ...prev, isActive: false, remainingSeconds: 0 }));
+
+          // 자동 재시도 실행
+          if (rateLimit.clientId && rateLimit.startDate && rateLimit.endDate) {
+            handleAutoRetryBackfill();
+          }
+        } else {
+          setRateLimit((prev) => ({ ...prev, remainingSeconds: remaining }));
+        }
+      }, 1000);
+    }
+
+    return () => {
+      if (rateLimitTimerRef.current) {
+        clearInterval(rateLimitTimerRef.current);
+      }
+    };
+  }, [rateLimit.isActive, rateLimit.retryAt]);
+
+  // Rate Limit 후 자동 재시도
+  const handleAutoRetryBackfill = async () => {
+    if (!rateLimit.clientId || !rateLimit.startDate || !rateLimit.endDate) return;
+
+    setBackfillLoading(true);
+    setBackfillLogs((prev) => [
+      ...prev,
+      {
+        time: new Date().toLocaleTimeString('ko-KR', { hour12: false }),
+        type: 'info',
+        message: '🔄 1시간 대기 완료! 자동 재시도 시작...',
+      },
+    ]);
+
+    try {
+      const response = await fetch('/api/admin/backfill', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey || '',
+        },
+        body: JSON.stringify({
+          clientId: rateLimit.clientId,
+          startDate: rateLimit.startDate,
+          endDate: rateLimit.endDate,
+        }),
+      });
+
+      // 동일한 SSE 처리 로직...
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('스트림을 읽을 수 없습니다.');
+      }
+
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        let eventType = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7);
+          } else if (line.startsWith('data: ') && eventType) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (eventType === 'log') {
+                setBackfillLogs((prev) => [...prev, data]);
+              } else if (eventType === 'complete') {
+                setBackfillResult({
+                  success: true,
+                  totalRecords: data.totalRecords,
+                  savedRecords: data.savedRecords,
+                });
+              } else if (eventType === 'rateLimit') {
+                // 또 Rate Limit 발생
+                setRateLimit({
+                  isActive: true,
+                  retryAt: data.retryAt,
+                  clientId: data.clientId,
+                  startDate: data.startDate,
+                  endDate: data.endDate,
+                  remainingSeconds: data.retryAfterMinutes * 60,
+                });
+              } else if (eventType === 'error') {
+                setBackfillResult({ success: false });
+              }
+            } catch {
+              // 무시
+            }
+            eventType = '';
+          }
+        }
+      }
+    } catch (err) {
+      setBackfillLogs((prev) => [
+        ...prev,
+        {
+          time: new Date().toLocaleTimeString('ko-KR', { hour12: false }),
+          type: 'error',
+          message: err instanceof Error ? err.message : '재시도 실패',
+        },
+      ]);
+    } finally {
+      setBackfillLoading(false);
+      fetchData();
+    }
+  };
 
   // 토큰 검증
   const validateToken = async () => {
@@ -591,6 +741,16 @@ export default function AdminPage() {
                   success: true,
                   totalRecords: data.totalRecords,
                   savedRecords: data.savedRecords,
+                });
+              } else if (eventType === 'rateLimit') {
+                // Rate Limit 발생 - 타이머 시작
+                setRateLimit({
+                  isActive: true,
+                  retryAt: data.retryAt,
+                  clientId: data.clientId,
+                  startDate: data.startDate,
+                  endDate: data.endDate,
+                  remainingSeconds: data.retryAfterMinutes * 60,
                 });
               } else if (eventType === 'error') {
                 setBackfillResult({
@@ -1510,8 +1670,49 @@ export default function AdminPage() {
                 </div>
               )}
 
+              {/* Rate Limit 타이머 UI */}
+              {rateLimit.isActive && (
+                <div className="bg-amber-50 border border-amber-300 rounded-lg p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2 bg-amber-100 rounded-full">
+                      <Timer className="w-6 h-6 text-amber-600 animate-pulse" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-amber-800">API Rate Limit 발생</h4>
+                      <p className="text-sm text-amber-600">자동 재시도까지 대기 중...</p>
+                    </div>
+                  </div>
+
+                  {/* 카운트다운 타이머 */}
+                  <div className="bg-amber-100 rounded-lg p-4 text-center">
+                    <div className="text-4xl font-mono font-bold text-amber-800 mb-2">
+                      {String(Math.floor(rateLimit.remainingSeconds / 3600)).padStart(2, '0')}:
+                      {String(Math.floor((rateLimit.remainingSeconds % 3600) / 60)).padStart(2, '0')}:
+                      {String(rateLimit.remainingSeconds % 60).padStart(2, '0')}
+                    </div>
+                    <p className="text-sm text-amber-600">
+                      재시도 예정: {rateLimit.retryAt && new Date(rateLimit.retryAt).toLocaleTimeString('ko-KR', { hour12: false })}
+                    </p>
+                  </div>
+
+                  {/* 진행 바 */}
+                  <div className="mt-3">
+                    <div className="h-2 bg-amber-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-amber-500 transition-all duration-1000"
+                        style={{ width: `${Math.max(0, 100 - (rateLimit.remainingSeconds / 3600) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-amber-600 mt-3 text-center">
+                    ⚠️ 창을 닫아도 타이머는 유지됩니다. 시간이 되면 자동으로 재시도됩니다.
+                  </p>
+                </div>
+              )}
+
               {/* 결과 메시지 */}
-              {backfillResult && (
+              {backfillResult && !rateLimit.isActive && (
                 <div
                   className={`rounded-lg p-4 ${
                     backfillResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
@@ -1528,13 +1729,18 @@ export default function AdminPage() {
               {/* 실행 버튼 */}
               <button
                 onClick={handleBackfillSubmit}
-                disabled={backfillLoading || !backfillForm.startDate || !backfillForm.endDate}
+                disabled={backfillLoading || rateLimit.isActive || !backfillForm.startDate || !backfillForm.endDate}
                 className="w-full py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {backfillLoading ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
                     백필 실행 중...
+                  </>
+                ) : rateLimit.isActive ? (
+                  <>
+                    <Pause className="w-5 h-5" />
+                    재시도 대기 중...
                   </>
                 ) : (
                   <>
