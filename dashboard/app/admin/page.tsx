@@ -16,7 +16,9 @@ import {
   Target,
   CreditCard,
   MessageCircle,
-  Calendar
+  Calendar,
+  Bell,
+  BellOff
 } from 'lucide-react';
 
 interface ClientTargets {
@@ -37,6 +39,7 @@ interface Client {
   auth_status: string;
   service_start_date: string | null;
   service_end_date: string | null;
+  telegram_enabled: boolean;
   created_at: string;
   updated_at: string;
   targets: ClientTargets | null;
@@ -53,6 +56,7 @@ interface ClientFormData {
   target_spend: string;
   target_cpl: string;
   service_start_date: string;
+  telegram_enabled: boolean;
 }
 
 const initialFormData: ClientFormData = {
@@ -65,7 +69,8 @@ const initialFormData: ClientFormData = {
   target_leads: '',
   target_spend: '',
   target_cpl: '',
-  service_start_date: new Date().toISOString().split('T')[0]
+  service_start_date: new Date().toISOString().split('T')[0],
+  telegram_enabled: true
 };
 
 export default function AdminPage() {
@@ -136,7 +141,8 @@ export default function AdminPage() {
             target_leads: formData.target_leads ? parseInt(formData.target_leads) : null,
             target_spend: formData.target_spend ? parseFloat(formData.target_spend) : null,
             target_cpl: formData.target_cpl ? parseFloat(formData.target_cpl) : null,
-            service_start_date: formData.service_start_date || null
+            service_start_date: formData.service_start_date || null,
+            telegram_enabled: formData.telegram_enabled
           }
         : {
             client_name: formData.client_name,
@@ -148,7 +154,8 @@ export default function AdminPage() {
             target_leads: formData.target_leads ? parseInt(formData.target_leads) : null,
             target_spend: formData.target_spend ? parseFloat(formData.target_spend) : null,
             target_cpl: formData.target_cpl ? parseFloat(formData.target_cpl) : null,
-            service_start_date: formData.service_start_date || null
+            service_start_date: formData.service_start_date || null,
+            telegram_enabled: formData.telegram_enabled
           };
 
       const response = await fetch('/api/clients', {
@@ -214,7 +221,8 @@ export default function AdminPage() {
       target_leads: client.targets?.target_leads?.toString() || '',
       target_spend: client.targets?.target_spend?.toString() || '',
       target_cpl: client.targets?.target_cpl?.toString() || '',
-      service_start_date: client.service_start_date || new Date().toISOString().split('T')[0]
+      service_start_date: client.service_start_date || new Date().toISOString().split('T')[0],
+      telegram_enabled: client.telegram_enabled ?? true
     });
     setShowModal(true);
   };
@@ -337,6 +345,19 @@ export default function AdminPage() {
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4" />
                         서비스: {client.service_start_date || '-'} ~ {client.service_end_date || '-'}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {client.telegram_enabled ? (
+                          <>
+                            <Bell className="w-4 h-4 text-green-600" />
+                            <span className="text-green-600">알림 ON</span>
+                          </>
+                        ) : (
+                          <>
+                            <BellOff className="w-4 h-4 text-neutral-400" />
+                            <span className="text-neutral-400">알림 OFF</span>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -484,22 +505,50 @@ export default function AdminPage() {
               <div className="pt-4 border-t border-neutral-200">
                 <h3 className="text-sm font-semibold text-neutral-900 mb-3">텔레그램 연동</h3>
 
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">
-                    텔레그램 채팅 ID
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.telegram_chat_id}
-                    onChange={(e) =>
-                      setFormData({ ...formData, telegram_chat_id: e.target.value })
-                    }
-                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="-1001234567890"
-                  />
-                  <p className="mt-1 text-xs text-neutral-500">
-                    리포트를 받을 텔레그램 채팅/그룹 ID
-                  </p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">
+                      텔레그램 채팅 ID
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.telegram_chat_id}
+                      onChange={(e) =>
+                        setFormData({ ...formData, telegram_chat_id: e.target.value })
+                      }
+                      className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="-1001234567890"
+                    />
+                    <p className="mt-1 text-xs text-neutral-500">
+                      리포트를 받을 텔레그램 채팅/그룹 ID
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      {formData.telegram_enabled ? (
+                        <Bell className="w-5 h-5 text-green-600" />
+                      ) : (
+                        <BellOff className="w-5 h-5 text-neutral-400" />
+                      )}
+                      <span className="text-sm font-medium text-neutral-700">
+                        텔레그램 리포트 발송
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, telegram_enabled: !formData.telegram_enabled })}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        formData.telegram_enabled ? 'bg-green-600' : 'bg-neutral-300'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          formData.telegram_enabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
               </div>
 

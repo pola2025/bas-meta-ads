@@ -2,9 +2,13 @@
 
 import { Header } from '@/components/Header'
 import { TelegramSettings } from '@/components/TelegramSettings'
-import { Settings as SettingsIcon } from 'lucide-react'
+import { Settings as SettingsIcon, Users, ExternalLink } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
 
 export default function SettingsPage() {
+  const searchParams = useSearchParams()
+  const adminKey = process.env.NEXT_PUBLIC_ADMIN_KEY
+
   const handleSaveSettings = async (config: any) => {
     try {
       const response = await fetch('/api/settings/telegram', {
@@ -38,13 +42,25 @@ export default function SettingsPage() {
 
           <TelegramSettings onSave={handleSaveSettings} />
 
-          {/* 추가 설정 섹션 */}
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold text-neutral-800 mb-4">대시보드 설정</h3>
-            <p className="text-sm text-neutral-600">
-              추가 설정 옵션은 향후 업데이트에서 제공됩니다.
-            </p>
-          </div>
+          {/* 관리자 전용: 클라이언트 관리 */}
+          {adminKey && (
+            <div className="bg-white p-6 rounded-lg shadow">
+              <div className="flex items-center gap-3 mb-4">
+                <Users className="w-6 h-6 text-blue-600" />
+                <h3 className="text-lg font-semibold text-neutral-800">클라이언트 관리</h3>
+              </div>
+              <p className="text-sm text-neutral-600 mb-4">
+                클라이언트 추가, 수정, 삭제 및 서비스 기간을 관리합니다.
+              </p>
+              <a
+                href={`/admin?admin=${adminKey}`}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <span>클라이언트 관리</span>
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            </div>
+          )}
         </div>
       </main>
     </div>

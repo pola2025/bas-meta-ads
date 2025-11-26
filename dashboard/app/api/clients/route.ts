@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
         auth_status,
         service_start_date,
         service_end_date,
+        telegram_enabled,
         created_at,
         updated_at
       `)
@@ -98,7 +99,8 @@ export async function POST(request: NextRequest) {
       target_leads,
       target_spend,
       target_cpl,
-      service_start_date
+      service_start_date,
+      telegram_enabled = true
     } = body;
 
     // 필수 필드 검증
@@ -134,7 +136,8 @@ export async function POST(request: NextRequest) {
         is_active: true,
         auth_status: meta_access_token ? 'active' : 'auth_required',
         service_start_date: startDate,
-        service_end_date: endDate
+        service_end_date: endDate,
+        telegram_enabled
       })
       .select()
       .single();
@@ -224,7 +227,8 @@ export async function PUT(request: NextRequest) {
       target_leads,
       target_spend,
       target_cpl,
-      service_start_date
+      service_start_date,
+      telegram_enabled
     } = body;
 
     if (!id) {
@@ -239,6 +243,7 @@ export async function PUT(request: NextRequest) {
     if (telegram_chat_id !== undefined) updateData.telegram_chat_id = telegram_chat_id;
     if (plan_type !== undefined) updateData.plan_type = plan_type;
     if (is_active !== undefined) updateData.is_active = is_active;
+    if (telegram_enabled !== undefined) updateData.telegram_enabled = telegram_enabled;
 
     // 서비스 시작일 변경 시 종료일 재계산
     if (service_start_date !== undefined) {
