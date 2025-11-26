@@ -24,6 +24,9 @@ const supabase = createClient(
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
 
+// 대시보드 URL
+const DASHBOARD_URL = 'https://bas-meta-ads-git-main-mkt9834-4301s-projects.vercel.app';
+
 // 날짜 포맷팅 (YYYY-MM-DD)
 function formatDate(date) {
   const y = date.getFullYear();
@@ -278,7 +281,7 @@ async function generateAIInsights(reportData) {
   }
 
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' });
 
   const prompt = `
 당신은 Meta 광고 성과를 분석하는 마케팅 전문가입니다.
@@ -342,17 +345,21 @@ ${reportData.dayOfWeekStats.map(d =>
   }
 }
 
-// 변화율 계산
+// 변화율 계산 (이모지 포함: 🟢⬆️ 상승, 🔴⬇️ 하락)
 function calculateChange(current, previous) {
-  if (!previous || previous === 0) return current > 0 ? '+100%' : '-';
+  if (!previous || previous === 0) return current > 0 ? '🟢⬆️ +100%' : '-';
   const change = ((current - previous) / previous) * 100;
-  return `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+  const emoji = change >= 0 ? '🟢⬆️' : '🔴⬇️';
+  const sign = change >= 0 ? '+' : '';
+  return `${emoji} ${sign}${change.toFixed(1)}%`;
 }
 
-// 이모지 막대 그래프 (리드 1건 = 1블럭)
-function generateEmojiBar(value) {
-  if (!value || value === 0) return '';
-  return '🟩'.repeat(Math.min(value, 10));
+// 이모지 막대 그래프 (최대값 기준 비율로 표시, maxBars개)
+function generateEmojiBar(value, maxValue, maxBars = 10) {
+  if (!value || value === 0 || !maxValue || maxValue === 0) return '';
+  const ratio = value / maxValue;
+  const bars = Math.max(1, Math.round(ratio * maxBars)); // 최소 1개
+  return '🟩'.repeat(bars);
 }
 
 // 효율성 평가
@@ -364,7 +371,7 @@ function getEfficiencyLabel(leadPercent, spendPercent, threshold = 5) {
 }
 
 // 텔레그램 메시지 생성 (4개로 분할)
-function generateTelegramMessages(dates, thisStats, prevStats, weekStats, dayOfWeekStats, adPerformance, campaignPerformance, aiInsights) {
+function generateTelegramMessages(dates, thisStats, prevStats, weekStats, dayOfWeekStats, adPerformance, campaignPerformance, aiInsights, clientId) {
   const messages = [];
 
   // 메시지 1: 헤더 & 월간 핵심 성과
@@ -403,7 +410,7 @@ function generateTelegramMessages(dates, thisStats, prevStats, weekStats, dayOfW
   } else if (leadChange >= 0) {
     msg1 += `• 리드 \\+${leadChange}건 증가\n`;
   } else {
-    msg1 += `• 리드 ${leadChange}건 감소 → 원인 분석 필요\n`;
+    msg1 += `• 리드 \\-${Math.abs(leadChange)}건 감소 → 원인 분석 필요\n`;
   }
 
   if (cplChange < 0) {
@@ -416,12 +423,15 @@ function generateTelegramMessages(dates, thisStats, prevStats, weekStats, dayOfW
 
   // 메시지 2: 주별 트렌드 & 요일별 패턴
   let msg2 = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg2 += `📅 *주별 트렌드 \\(W1\\~W${weekStats.length}\\)*\n`;
+  msg2 += `📅 *주별 트렌드 \\(1주차\\~${weekStats.length}주차\\)*\n`;
   msg2 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
+  // 주별 최대 리드 수 계산
+  const maxWeekLeads = Math.max(...weekStats.map(w => w.leads || 0));
+
   weekStats.forEach(w => {
-    const bar = generateEmojiBar(w.leads);
-    msg2 += `W${w.week} \\(${escapeMd(w.label)}\\)\n`;
+    const bar = generateEmojiBar(w.leads, maxWeekLeads, 10);
+    msg2 += `${w.week}주차 \\(${escapeMd(w.label)}\\)\n`;
     msg2 += `${bar} ${w.leads}건\n`;
     msg2 += `CPL: ${w.leads > 0 ? '$' + escapeMd(w.cpl.toFixed(2)) : '\\-'} │ 지출: $${escapeMd(w.spend.toFixed(2))}\n\n`;
   });
@@ -430,12 +440,15 @@ function generateTelegramMessages(dates, thisStats, prevStats, weekStats, dayOfW
   msg2 += `📊 *요일별 성과 패턴*\n`;
   msg2 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
+  // 요일별 최대 리드 수 계산
+  const maxDayLeads = Math.max(...dayOfWeekStats.map(d => d.leads || 0));
+
   // 요일 순서: 월~일
   const orderedDays = [1, 2, 3, 4, 5, 6, 0]; // 월화수목금토일
   orderedDays.forEach(idx => {
     const d = dayOfWeekStats.find(s => s.name === ['일', '월', '화', '수', '목', '금', '토'][idx]);
     if (d) {
-      const bar = generateEmojiBar(Math.round(d.leads / 5)); // 스케일 조정
+      const bar = generateEmojiBar(d.leads, maxDayLeads, 8);
       msg2 += `${d.name}: ${String(d.leads).padStart(2, ' ')}건 \\(${escapeMd(d.percent.toFixed(1))}%\\) ${bar}\n`;
     }
   });
@@ -511,6 +524,12 @@ function generateTelegramMessages(dates, thisStats, prevStats, weekStats, dayOfW
     msg4 += `\n\n`;
   }
 
+  msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg4 += `📊 *상세 대시보드*\n`;
+  msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  msg4 += `더 자세한 데이터는 대시보드에서 확인하세요\\.\n`;
+  const reportUrl = `${DASHBOARD_URL}/reports?client=${clientId || '79e35fc6-a817-4ccc-9d5d-9a93c1ad4515'}`;
+  msg4 += `🔗 ${escapeMd(reportUrl)}\n\n`;
   msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   msg4 += `📞 *문의하기*\n`;
   msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
@@ -603,6 +622,7 @@ async function main() {
 
   // 7. 텔레그램 메시지 생성
   console.log('📝 텔레그램 메시지 생성 중...\n');
+  const clientId = process.env.CLIENT_ID || '79e35fc6-a817-4ccc-9d5d-9a93c1ad4515'; // 비즈액터스쿨
   const messages = generateTelegramMessages(
     dates,
     thisStats,
@@ -611,7 +631,8 @@ async function main() {
     dayOfWeekStats,
     adPerformance,
     campaignPerformance,
-    aiInsights
+    aiInsights,
+    clientId
   );
 
   // 8. 텔레그램 발송
@@ -626,7 +647,10 @@ async function main() {
   try {
     for (let i = 0; i < messages.length; i++) {
       console.log(`메시지 ${i + 1}/${messages.length} 발송 중...`);
-      await bot.sendMessage(chatId, messages[i], { parse_mode: 'MarkdownV2' });
+      await bot.sendMessage(chatId, messages[i], {
+        parse_mode: 'MarkdownV2',
+        disable_web_page_preview: true
+      });
       console.log(`✅ 메시지 ${i + 1} 발송 완료`);
 
       if (i < messages.length - 1) {

@@ -223,7 +223,7 @@ ${topAds.slice(0, 5).map((ad, i) => `${i+1}. ${ad.ad_name}
 **중요**: 구체적인 숫자와 광고명을 포함하여 작성`;
 
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-3-pro-preview',
       generationConfig: {
         temperature: 0.7,
         maxOutputTokens: 512,

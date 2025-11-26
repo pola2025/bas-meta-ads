@@ -1,98 +1,91 @@
 # 다음 세션 작업 요청
 
-**작성일**: 2025-11-25
-**이전 세션 완료**: 멀티클라이언트 대시보드 기획서 작성 완료
+**작성일**: 2025-11-26
+**상태**: 클라이언트 관리 기능 구현 완료
 
 ---
 
-## 🎯 다음 세션 첫 번째 요청
+## 1. 이번 세션 완료 작업
 
+### 플랫폼별 성과 배포 이슈 해결 ✅
+- **원인**: `raw_data` 테이블 RLS 정책으로 anon 키 접근 차단
+- **해결**: `raw_data` 테이블에 anon 읽기 정책 추가
+```sql
+CREATE POLICY "Allow anon read access for raw_data"
+ON raw_data FOR SELECT TO anon USING (true);
 ```
-멀티클라이언트 대시보드 구현 시작해줘.
-기획서: MULTI_CLIENT_DASHBOARD_SPEC.md
-Phase 1부터 순서대로 진행해줘.
-테스트는 Phase 6에서 마지막에 진행.
-```
 
----
+### 클라이언트 관리 기능 구현 ✅
+- 관리자 페이지: `/admin?admin=관리자키`
+- API 라우트: `/api/clients` (CRUD)
+- service_role 키 분리 (`lib/supabase-admin.ts`)
 
-## ✅ 이번 세션 완료 내용
+### 입력 필드
+| 필드 | 필수 | 설명 |
+|------|------|------|
+| 클라이언트명 | ✅ | 회사/브랜드 이름 |
+| 이메일 | ✅ | 연락용 이메일 |
+| Meta 광고계정 ID | - | act_XXXXXXXXX |
+| Meta Access Token | - | 장기 토큰 (생성 시만) |
+| 텔레그램 채팅 ID | - | 리포트 발송용 |
+| 플랜 타입 | - | free/basic/premium |
+| 월 목표 리드 | - | 숫자 |
+| 월 목표 예산 ($) | - | 달러 |
+| 목표 CPL ($) | - | 달러 |
 
-### 1. 리포트 아카이브 기능 완성
-- `report_data` JSONB 컬럼 확인 (이미 존재)
-- 주간 리포트 재발송 (구조화된 데이터 저장)
-- 월간 리포트 재발송 (구조화된 데이터 저장)
-- Vercel 배포 완료 (Root Directory: dashboard)
-
-### 2. 멀티클라이언트 대시보드 기획서 작성
-- `MULTI_CLIENT_DASHBOARD_SPEC.md` 생성
-- 접근 제어 설계 (admin/client/denied)
-- 6단계 구현 Phase 정의
-- 피드백 반영 (slug 난수화, admin key UUID 등)
-
----
-
-## 📊 현재 데이터 현황
-
-```
-저장된 리포트:
-- 주간: 2025-11-17~23 (리드 16건, $409.53) - report_data ✅
-- 월간: 2025-05 (리드 86건, $1,410.63) - report_data ✅
-
-AI 인사이트:
-- telegram_reports.ai_insights 컬럼 존재 ✅
-- 현재 SKIP_AI=true로 테스트했으므로 실제 AI 데이터 없음
-- 다음 리포트 발송 시 AI 활성화 필요
+### Supabase 마이그레이션 (실행 완료)
+```sql
+-- clients 테이블에 telegram_chat_id 컬럼 추가
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(50);
+CREATE INDEX IF NOT EXISTS idx_clients_telegram_chat_id ON clients(telegram_chat_id);
 ```
 
 ---
 
-## 🗂️ 주요 파일
+## 2. 생성된 파일
 
-| 파일 | 용도 |
+| 파일 | 설명 |
 |------|------|
-| `MULTI_CLIENT_DASHBOARD_SPEC.md` | **멀티클라이언트 기획서** |
-| `send-weekly-report.js` | 주간 리포트 발송 |
-| `send-monthly-report.js` | 월간 리포트 발송 |
-| `lib/report-storage.js` | 리포트 DB 저장 모듈 |
-| `dashboard/app/reports/page.tsx` | 리포트 아카이브 페이지 |
+| `dashboard/lib/supabase-admin.ts` | service_role 키 사용 (서버 전용) |
+| `dashboard/app/api/clients/route.ts` | 클라이언트 CRUD API |
+| `dashboard/app/admin/page.tsx` | 관리자 페이지 UI |
+| `sql/17_raw_data_rls_policy.sql` | raw_data RLS 정책 |
+| `sql/18_add_telegram_chat_id.sql` | telegram_chat_id 컬럼 |
 
 ---
 
-## 🔧 구현 Phase 요약
+## 3. Vercel 환경변수 추가 필요
 
-| Phase | 내용 | 상태 |
-|-------|------|------|
-| 1 | DB 준비 및 기본 접근 제어 | ⏳ 대기 |
-| 2 | 데이터 필터링 | ⏳ 대기 |
-| 3 | 텔레그램 연동 (대시보드 링크) | ⏳ 대기 |
-| 4 | UI 개선 (AI 인사이트 개요탭) | ⏳ 대기 |
-| 5 | 메인 대시보드 적용 | ⏳ 대기 |
-| 6 | 테스트 | ⏳ 마지막 |
+Vercel Dashboard에서 다음 환경변수 추가:
+```
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+(service_role 키 - 클라이언트 관리 API용)
 
 ---
 
-## 📱 텔레그램 채널
+## 4. 다음 작업 예정
 
-- 테스트: `-1003394139746`
-- 운영: `-1002733338460`
+1. **Vercel 배포 후 테스트**
+   - 클라이언트 관리 페이지 테스트
+   - 새 클라이언트 생성 테스트
+
+2. **텔레그램 리포트 연동**
+   - 클라이언트별 telegram_chat_id 사용하여 리포트 발송
+
+3. **대시보드 기능 개선**
+   - 목표 대비 실적 표시
+   - 월간 리포트 기능
 
 ---
 
-## 🚀 실행 명령어
+## 5. 개발 서버
 
 ```bash
-# AI 인사이트 포함 주간 리포트 테스트
-TELEGRAM_CHAT_ID=-1003394139746 node send-weekly-report.js
-
-# AI 제외 빠른 테스트
-SKIP_AI=true TELEGRAM_CHAT_ID=-1003394139746 node send-weekly-report.js
+cd F:/bas_meta/dashboard && npm run dev
 ```
 
----
-
-## ⚠️ 주의사항
-
-1. **Slug 난수화**: 클라이언트 slug는 `bas-k92m7x` 형식으로 추측 어렵게
-2. **Admin Key**: UUID 형식으로 복잡하게 설정
-3. **NEXT_PUBLIC_ 노출**: 브라우저에서 확인 가능하므로 Admin Key 유출 주의
+### URL
+- **로컬 대시보드**: http://localhost:3000?admin=a3f8c2e1-9d4b-4f7a-b6c5-8e2d1f0a9b3c
+- **관리자 페이지**: http://localhost:3000/admin?admin=a3f8c2e1-9d4b-4f7a-b6c5-8e2d1f0a9b3c
+- **배포 대시보드**: https://bas-meta-ads-git-main-mkt9834-4301s-projects.vercel.app/?client=79e35fc6-a817-4ccc-9d5d-9a93c1ad4515

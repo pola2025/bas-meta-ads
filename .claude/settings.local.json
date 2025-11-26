@@ -58,7 +58,17 @@
       "Bash(DATA_DAYS=14 node:*)",
       "Bash(node aggregate-november.js:*)",
       "Bash(export SKIP_AI=true)",
-      "Bash(node test-report-table.js:*)"
+      "Bash(node test-report-table.js:*)",
+      "Bash(node test-client-access.js:*)",
+      "Bash(node apply-phase1-migration.js:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(npm run dev:*)",
+      "Bash(node check-archive-data.js:*)",
+      "Bash(taskkill:*)",
+      "Bash(node test-api-function.js:*)",
+      "Bash(node resend-report.js:*)",
+      "WebFetch(domain:stackoverflow.com)"
     ],
     "deny": [],
     "ask": []

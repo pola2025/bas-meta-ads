@@ -23,6 +23,9 @@ const supabase = createClient(
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
 
+// 대시보드 URL
+const DASHBOARD_URL = 'https://bas-meta-ads-git-main-mkt9834-4301s-projects.vercel.app';
+
 // 날짜 계산 (가장 최근 완료된 주 기준: 월~일)
 // 오늘이 11/25(화)이면 → 이번주: 11/17~23, 지난주: 11/10~16
 function getWeekDates() {
@@ -242,7 +245,7 @@ async function generateAIInsights(reportData) {
   }
 
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' });
 
   const prompt = `
 당신은 Meta 광고 성과를 분석하는 마케팅 전문가입니다.
@@ -318,7 +321,7 @@ function getDayOfWeekKr(dateString) {
 }
 
 // 텔레그램 메시지 생성 (3개로 분할)
-function generateTelegramMessages(dates, thisStats, lastStats, thisWeekData, adPerformance, campaignPerformance, aiInsights, clientInfo = { name: '비즈액터스쿨', slug: 'bas-k92m7x' }) {
+function generateTelegramMessages(dates, thisStats, lastStats, thisWeekData, adPerformance, campaignPerformance, aiInsights, clientInfo = { name: '비즈액터스쿨', slug: 'bas-k92m7x', id: '79e35fc6-a817-4ccc-9d5d-9a93c1ad4515' }) {
   const messages = [];
 
   // 메시지 1: 핵심 성과 (Section 1-4)
@@ -457,40 +460,51 @@ function generateTelegramMessages(dates, thisStats, lastStats, thisWeekData, adP
     }
   }
 
-  // AI 인사이트 섹션
-  if (aiInsights) {
-    msg2 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    msg2 += `🤖 *Polarad AI 인사이트*\n`;
-    msg2 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-    msg2 += escapeMd(aiInsights);
-  }
-
   messages.push(msg2);
 
-  // 메시지 3: 푸터 (Section 7)
-  // 대시보드 링크 생성
-  const dashboardUrl = process.env.DASHBOARD_URL || 'https://bas-meta-dashboard.vercel.app';
-  const reportUrl = `${dashboardUrl}/reports?client=${clientInfo.slug}`;
-
-  let msg3 = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg3 += `📊 *상세 리포트 보기*\n`;
-  msg3 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-  msg3 += `더 자세한 분석은 대시보드에서 확인하세요\\:\n`;
-  msg3 += `${escapeMd(reportUrl)}\n\n`;
-
-  msg3 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg3 += `📞 *문의하기*\n`;
-  msg3 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-  msg3 += `리포트 관련 문의가 필요하시면 언제든 연락주세요\\.\n\n`;
-  msg3 += `📧 이메일: mkt@polarad\\.co\\.kr\n\n`;
-  msg3 += `🕐 *운영시간*\n`;
-  msg3 += `평일 09:00 \\~ 18:00\n`;
-  msg3 += `주말 휴무 \\(공휴일 포함\\)\n\n`;
-  msg3 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg3 += `🤖 Powered by Polarad AI\n`;
-  msg3 += `자동 생성 리포트 \\| 매주 월요일 오전 9시 발송\n`;
+  // 메시지 3: AI 인사이트 (별도 메시지로 분리)
+  let msg3 = '';
+  if (aiInsights) {
+    msg3 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    msg3 += `🤖 *Polarad AI 인사이트*\n`;
+    msg3 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    msg3 += escapeMd(aiInsights);
+    msg3 += `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    msg3 += `🤖 Powered by Polarad AI\n`;
+    msg3 += `자동 생성 리포트 \\| 매주 월요일 오전 9시 발송\n`;
+  }
 
   messages.push(msg3);
+
+  // 메시지 4: 링크 & 푸터 (별도 메시지로 분리)
+  // 대시보드 링크 생성
+  const reportUrl = `${DASHBOARD_URL}/reports?client=${clientInfo.slug}`;
+  const dashboardUrl = `${DASHBOARD_URL}/?client=${clientInfo.id}&start=${dates.thisWeekStart}&end=${dates.thisWeekEnd}`;
+
+  let msg4 = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg4 += `📊 *상세 리포트 보기*\n`;
+  msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  msg4 += `더 자세한 분석은 리포트 아카이브에서 확인하세요\\:\n`;
+  msg4 += `${escapeMd(reportUrl)}\n\n`;
+
+  msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg4 += `📊 *Meta 광고 성과분석 대시보드*\n`;
+  msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  msg4 += `${escapeMd(dashboardUrl)}\n\n`;
+
+  msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg4 += `📞 *문의하기*\n`;
+  msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  msg4 += `리포트 관련 문의가 필요하시면 언제든 연락주세요\\.\n\n`;
+  msg4 += `📧 이메일: mkt@polarad\\.co\\.kr\n\n`;
+  msg4 += `🕐 *운영시간*\n`;
+  msg4 += `평일 09:00 \\~ 18:00\n`;
+  msg4 += `주말 휴무 \\(공휴일 포함\\)\n\n`;
+  msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg4 += `🤖 Powered by Polarad AI\n`;
+  msg4 += `자동 생성 리포트 \\| 매주 월요일 오전 9시 발송\n`;
+
+  messages.push(msg4);
 
   return messages;
 }

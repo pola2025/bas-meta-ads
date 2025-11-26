@@ -57,6 +57,7 @@ interface ClientFormData {
   target_cpl: string;
   service_start_date: string;
   telegram_enabled: boolean;
+  unlimited_service: boolean;
 }
 
 const initialFormData: ClientFormData = {
@@ -70,7 +71,8 @@ const initialFormData: ClientFormData = {
   target_spend: '',
   target_cpl: '',
   service_start_date: new Date().toISOString().split('T')[0],
-  telegram_enabled: true
+  telegram_enabled: true,
+  unlimited_service: false
 };
 
 export default function AdminPage() {
@@ -142,7 +144,8 @@ export default function AdminPage() {
             target_spend: formData.target_spend ? parseFloat(formData.target_spend) : null,
             target_cpl: formData.target_cpl ? parseFloat(formData.target_cpl) : null,
             service_start_date: formData.service_start_date || null,
-            telegram_enabled: formData.telegram_enabled
+            telegram_enabled: formData.telegram_enabled,
+            unlimited_service: formData.unlimited_service
           }
         : {
             client_name: formData.client_name,
@@ -155,7 +158,8 @@ export default function AdminPage() {
             target_spend: formData.target_spend ? parseFloat(formData.target_spend) : null,
             target_cpl: formData.target_cpl ? parseFloat(formData.target_cpl) : null,
             service_start_date: formData.service_start_date || null,
-            telegram_enabled: formData.telegram_enabled
+            telegram_enabled: formData.telegram_enabled,
+            unlimited_service: formData.unlimited_service
           };
 
       const response = await fetch('/api/clients', {
@@ -222,7 +226,8 @@ export default function AdminPage() {
       target_spend: client.targets?.target_spend?.toString() || '',
       target_cpl: client.targets?.target_cpl?.toString() || '',
       service_start_date: client.service_start_date || new Date().toISOString().split('T')[0],
-      telegram_enabled: client.telegram_enabled ?? true
+      telegram_enabled: client.telegram_enabled ?? true,
+      unlimited_service: client.service_end_date === null
     });
     setShowModal(true);
   };
@@ -344,7 +349,11 @@ export default function AdminPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4" />
-                        서비스: {client.service_start_date || '-'} ~ {client.service_end_date || '-'}
+                        서비스: {client.service_start_date || '-'} ~ {client.service_end_date === null ? (
+                          <span className="text-blue-600 font-medium">무제한</span>
+                        ) : (
+                          client.service_end_date || '-'
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         {client.telegram_enabled ? (
@@ -556,19 +565,39 @@ export default function AdminPage() {
               <div className="pt-4 border-t border-neutral-200">
                 <h3 className="text-sm font-semibold text-neutral-900 mb-3">서비스 기간</h3>
 
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">
-                    서비스 시작일
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">
+                      서비스 시작일
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.service_start_date}
+                      onChange={(e) => setFormData({ ...formData, service_start_date: e.target.value })}
+                      className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+
+                  <label className="flex items-center gap-3 p-3 bg-neutral-50 rounded-lg cursor-pointer hover:bg-neutral-100 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={formData.unlimited_service}
+                      onChange={(e) => setFormData({ ...formData, unlimited_service: e.target.checked })}
+                      className="w-5 h-5 rounded border-neutral-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-neutral-700">무제한 서비스</span>
+                      <p className="text-xs text-neutral-500">
+                        체크하면 서비스 종료일이 없이 무기한 사용 가능합니다
+                      </p>
+                    </div>
                   </label>
-                  <input
-                    type="date"
-                    value={formData.service_start_date}
-                    onChange={(e) => setFormData({ ...formData, service_start_date: e.target.value })}
-                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <p className="mt-1 text-xs text-neutral-500">
-                    종료일은 시작일 기준 3개월 후 자동 계산됩니다
-                  </p>
+
+                  {!formData.unlimited_service && (
+                    <p className="text-xs text-neutral-500">
+                      종료일은 시작일 기준 3개월 후 자동 계산됩니다
+                    </p>
+                  )}
                 </div>
               </div>
 

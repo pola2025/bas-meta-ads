@@ -308,7 +308,7 @@ ${adStats.slice(0, 5).map((ad, i) => `${i + 1}. ${ad.ad_name}: 리드 ${ad.leads
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' });
     const result = await model.generateContent(prompt);
     return result.response.text();
   } catch (error) {

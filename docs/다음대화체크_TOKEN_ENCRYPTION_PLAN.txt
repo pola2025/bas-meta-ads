@@ -1,0 +1,22 @@
+● 기획서 작성 완료했습니다.
+
+  📋 남은 작업 요약
+
+  | 순서  | 작업                                         | 담당     |
+  |-----|--------------------------------------------|--------|
+  | 1   | SQL 실행 (sql/20_encrypted_token_column.sql) | 수동     |
+  | 2   | 환경변수 TOKEN_ENCRYPTION_KEY 설정               | 수동     |
+  | 3   | API 수정 (토큰 암호화 저장)                         | Claude |
+  | 4   | Worker 수정 (토큰 복호화 사용)                      | Claude |
+  | 5   | 테스트                                        | Claude |
+
+  기획서 위치: docs/TOKEN_ENCRYPTION_PLAN.md
+
+  SQL 먼저 실행하고 환경변수 설정하시면, 나머지 코드 수정은 제가 진행하겠습니다.
+
+  Todos
+  ☒ clients 테이블에 encrypted_access_token 컬럼 추가 (SQL)
+  ☒ 암호화 유틸리티 함수 생성 (lib/encryption.js)
+  ☐ API에서 토큰 암호화 저장하도록 수정
+  ☐ Worker에서 토큰 복호화 사용하도록 수정
+  ☐ 테스트 및 검증
