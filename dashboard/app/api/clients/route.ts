@@ -14,6 +14,15 @@ function generatePasswordHash(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
+// 서비스 종료일 계산 (시작일 + 3개월 - 1일)
+function calculateEndDate(startDate: string): string {
+  const start = new Date(startDate);
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 3);
+  end.setDate(end.getDate() - 1);
+  return end.toISOString().split('T')[0];
+}
+
 // GET: 클라이언트 목록 조회
 export async function GET(request: NextRequest) {
   if (!isAdmin(request)) {
@@ -33,9 +42,12 @@ export async function GET(request: NextRequest) {
         plan_type,
         is_active,
         auth_status,
+        service_start_date,
+        service_end_date,
         created_at,
         updated_at
       `)
+      .eq('is_active', true)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -85,7 +97,8 @@ export async function POST(request: NextRequest) {
       plan_type = 'free',
       target_leads,
       target_spend,
-      target_cpl
+      target_cpl,
+      service_start_date
     } = body;
 
     // 필수 필드 검증
@@ -103,6 +116,10 @@ export async function POST(request: NextRequest) {
       .replace(/_+/g, '_')
       .slice(0, 50);
 
+    // 서비스 기간 계산
+    const startDate = service_start_date || new Date().toISOString().split('T')[0];
+    const endDate = calculateEndDate(startDate);
+
     // 클라이언트 생성
     const { data: newClient, error: clientError } = await supabaseAdmin
       .from('clients')
@@ -115,7 +132,9 @@ export async function POST(request: NextRequest) {
         telegram_chat_id: telegram_chat_id || null,
         plan_type,
         is_active: true,
-        auth_status: meta_access_token ? 'active' : 'auth_required'
+        auth_status: meta_access_token ? 'active' : 'auth_required',
+        service_start_date: startDate,
+        service_end_date: endDate
       })
       .select()
       .single();
@@ -204,7 +223,8 @@ export async function PUT(request: NextRequest) {
       is_active,
       target_leads,
       target_spend,
-      target_cpl
+      target_cpl,
+      service_start_date
     } = body;
 
     if (!id) {
@@ -219,6 +239,12 @@ export async function PUT(request: NextRequest) {
     if (telegram_chat_id !== undefined) updateData.telegram_chat_id = telegram_chat_id;
     if (plan_type !== undefined) updateData.plan_type = plan_type;
     if (is_active !== undefined) updateData.is_active = is_active;
+
+    // 서비스 시작일 변경 시 종료일 재계산
+    if (service_start_date !== undefined) {
+      updateData.service_start_date = service_start_date;
+      updateData.service_end_date = calculateEndDate(service_start_date);
+    }
 
     const { data: updatedClient, error: updateError } = await supabaseAdmin
       .from('clients')
@@ -258,7 +284,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// DELETE: 클라이언트 삭제 (soft delete)
+// DELETE: 클라이언트 삭제 (hard delete)
 export async function DELETE(request: NextRequest) {
   if (!isAdmin(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -272,10 +298,10 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Client ID is required' }, { status: 400 });
     }
 
-    // Soft delete: is_active = false
+    // Hard delete: 완전 삭제
     const { error } = await supabaseAdmin
       .from('clients')
-      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .delete()
       .eq('id', id);
 
     if (error) {
@@ -283,7 +309,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, message: 'Client deactivated' });
+    return NextResponse.json({ success: true, message: 'Client deleted' });
 
   } catch (error) {
     console.error('Unexpected error:', error);

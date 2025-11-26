@@ -15,7 +15,8 @@ import {
   Mail,
   Target,
   CreditCard,
-  MessageCircle
+  MessageCircle,
+  Calendar
 } from 'lucide-react';
 
 interface ClientTargets {
@@ -34,6 +35,8 @@ interface Client {
   plan_type: string;
   is_active: boolean;
   auth_status: string;
+  service_start_date: string | null;
+  service_end_date: string | null;
   created_at: string;
   updated_at: string;
   targets: ClientTargets | null;
@@ -49,6 +52,7 @@ interface ClientFormData {
   target_leads: string;
   target_spend: string;
   target_cpl: string;
+  service_start_date: string;
 }
 
 const initialFormData: ClientFormData = {
@@ -60,7 +64,8 @@ const initialFormData: ClientFormData = {
   plan_type: 'free',
   target_leads: '',
   target_spend: '',
-  target_cpl: ''
+  target_cpl: '',
+  service_start_date: new Date().toISOString().split('T')[0]
 };
 
 export default function AdminPage() {
@@ -130,7 +135,8 @@ export default function AdminPage() {
             plan_type: formData.plan_type,
             target_leads: formData.target_leads ? parseInt(formData.target_leads) : null,
             target_spend: formData.target_spend ? parseFloat(formData.target_spend) : null,
-            target_cpl: formData.target_cpl ? parseFloat(formData.target_cpl) : null
+            target_cpl: formData.target_cpl ? parseFloat(formData.target_cpl) : null,
+            service_start_date: formData.service_start_date || null
           }
         : {
             client_name: formData.client_name,
@@ -141,7 +147,8 @@ export default function AdminPage() {
             plan_type: formData.plan_type,
             target_leads: formData.target_leads ? parseInt(formData.target_leads) : null,
             target_spend: formData.target_spend ? parseFloat(formData.target_spend) : null,
-            target_cpl: formData.target_cpl ? parseFloat(formData.target_cpl) : null
+            target_cpl: formData.target_cpl ? parseFloat(formData.target_cpl) : null,
+            service_start_date: formData.service_start_date || null
           };
 
       const response = await fetch('/api/clients', {
@@ -172,7 +179,7 @@ export default function AdminPage() {
 
   // 클라이언트 삭제
   const handleDelete = async (client: Client) => {
-    if (!confirm(`"${client.client_name}" 클라이언트를 비활성화하시겠습니까?`)) {
+    if (!confirm(`"${client.client_name}" 클라이언트를 완전히 삭제하시겠습니까?\n\n⚠️ 이 작업은 되돌릴 수 없습니다.`)) {
       return;
     }
 
@@ -206,7 +213,8 @@ export default function AdminPage() {
       plan_type: client.plan_type,
       target_leads: client.targets?.target_leads?.toString() || '',
       target_spend: client.targets?.target_spend?.toString() || '',
-      target_cpl: client.targets?.target_cpl?.toString() || ''
+      target_cpl: client.targets?.target_cpl?.toString() || '',
+      service_start_date: client.service_start_date || new Date().toISOString().split('T')[0]
     });
     setShowModal(true);
   };
@@ -326,6 +334,10 @@ export default function AdminPage() {
                         목표: {client.targets?.target_leads || '-'}리드 / $
                         {client.targets?.target_spend?.toLocaleString() || '-'}
                       </div>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4" />
+                        서비스: {client.service_start_date || '-'} ~ {client.service_end_date || '-'}
+                      </div>
                     </div>
 
                     {/* 대시보드 URL */}
@@ -368,7 +380,7 @@ export default function AdminPage() {
                     <button
                       onClick={() => handleDelete(client)}
                       className="p-2 text-neutral-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="비활성화"
+                      title="삭제"
                     >
                       <Trash2 className="w-5 h-5" />
                     </button>
@@ -487,6 +499,26 @@ export default function AdminPage() {
                   />
                   <p className="mt-1 text-xs text-neutral-500">
                     리포트를 받을 텔레그램 채팅/그룹 ID
+                  </p>
+                </div>
+              </div>
+
+              {/* 서비스 기간 */}
+              <div className="pt-4 border-t border-neutral-200">
+                <h3 className="text-sm font-semibold text-neutral-900 mb-3">서비스 기간</h3>
+
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                    서비스 시작일
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.service_start_date}
+                    onChange={(e) => setFormData({ ...formData, service_start_date: e.target.value })}
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="mt-1 text-xs text-neutral-500">
+                    종료일은 시작일 기준 3개월 후 자동 계산됩니다
                   </p>
                 </div>
               </div>
