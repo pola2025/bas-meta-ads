@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Plus,
   Users,
@@ -23,9 +23,14 @@ import {
   History,
   CalendarPlus,
   Database,
-  RefreshCw,
   Play,
-  Loader2
+  Loader2,
+  Activity,
+  AlertTriangle,
+  TrendingUp,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 interface ClientTargets {
@@ -50,22 +55,38 @@ interface Client {
   created_at: string;
   updated_at: string;
   targets: ClientTargets | null;
+  latestDataDate: string | null;
+  dataCount: number;
 }
 
-interface ClientFormData {
-  client_name: string;
-  email: string;
-  meta_ad_account_id: string;
-  meta_access_token: string;
-  telegram_chat_id: string;
-  plan_type: string;
-  target_leads: string;
-  target_spend: string;
-  target_cpl: string;
-  service_start_date: string;
-  service_end_date: string;
-  telegram_enabled: boolean;
-  unlimited_service: boolean;
+interface SystemStatus {
+  clients: {
+    total: number;
+    active: number;
+    inactive: number;
+    withTelegram: number;
+    expiringSoon: number;
+    expiringList: Array<{ id: string; name: string; endDate: string }>;
+  };
+  dataCollection: {
+    todayRecords: number;
+    yesterdayRecords: number;
+    missingDataClients: number;
+    missingList: Array<{ id: string; name: string; lastDate: string | null }>;
+  };
+  recent7Days: {
+    impressions: number;
+    clicks: number;
+    leads: number;
+    spend: number;
+    ctr: number;
+    cpl: number;
+  };
+  reports: {
+    latestSentAt: string | null;
+    latestType: string | null;
+    recentCount: number;
+  };
 }
 
 interface Payment {
@@ -80,7 +101,13 @@ interface Payment {
   created_at: string;
 }
 
-const initialFormData: ClientFormData = {
+interface BackfillLog {
+  time: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  message: string;
+}
+
+const initialFormData = {
   client_name: '',
   email: '',
   meta_ad_account_id: '',
@@ -93,23 +120,25 @@ const initialFormData: ClientFormData = {
   service_start_date: new Date().toISOString().split('T')[0],
   service_end_date: '',
   telegram_enabled: true,
-  unlimited_service: false
+  unlimited_service: false,
 };
 
 export default function AdminPage() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const adminKey = searchParams.get('admin');
 
   const [clients, setClients] = useState<Client[]>([]);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // 모달 상태
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
-  const [formData, setFormData] = useState<ClientFormData>(initialFormData);
+  const [formData, setFormData] = useState(initialFormData);
   const [submitting, setSubmitting] = useState(false);
+  const [tokenValidating, setTokenValidating] = useState(false);
+  const [tokenValidation, setTokenValidation] = useState<{ valid: boolean; accountName?: string; error?: string } | null>(null);
 
   // 복사 상태
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -125,41 +154,54 @@ export default function AdminPage() {
     payment_type: 'monthly',
     memo: '',
     service_months: '3',
-    use_today: true // true면 오늘 날짜, false면 직접 지정
+    use_today: true,
   });
 
   // 백필 모달 상태
   const [showBackfillModal, setShowBackfillModal] = useState(false);
   const [backfillClient, setBackfillClient] = useState<Client | null>(null);
   const [backfillLoading, setBackfillLoading] = useState(false);
-  const [backfillResult, setBackfillResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [backfillLogs, setBackfillLogs] = useState<BackfillLog[]>([]);
+  const [backfillResult, setBackfillResult] = useState<{ success: boolean; totalRecords?: number; savedRecords?: number } | null>(null);
   const [backfillForm, setBackfillForm] = useState({
     startDate: '',
     endDate: '',
-    preset: 'custom' // 'last7', 'last30', 'last90', 'custom'
+    preset: 'last7',
   });
+  const logsEndRef = useRef<HTMLDivElement>(null);
+
+  // 시스템 현황 펼침 상태
+  const [showSystemDetails, setShowSystemDetails] = useState(false);
 
   // 관리자 키 검증
   const isValidAdmin = adminKey === process.env.NEXT_PUBLIC_ADMIN_KEY;
 
-  // 클라이언트 목록 조회
-  const fetchClients = async () => {
+  // 데이터 로드
+  const fetchData = async () => {
     if (!isValidAdmin) return;
 
     try {
       setLoading(true);
-      const response = await fetch('/api/clients', {
-        headers: {
-          'x-admin-key': adminKey || ''
-        }
-      });
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch clients');
+      // 클라이언트 목록과 시스템 상태 동시 조회
+      const [clientsRes, statusRes] = await Promise.all([
+        fetch('/api/admin/clients', {
+          headers: { 'x-admin-key': adminKey || '' },
+        }),
+        fetch('/api/admin/status', {
+          headers: { 'x-admin-key': adminKey || '' },
+        }),
+      ]);
+
+      if (clientsRes.ok) {
+        const data = await clientsRes.json();
+        setClients(data.clients || []);
       }
 
-      const data = await response.json();
-      setClients(data.clients || []);
+      if (statusRes.ok) {
+        const data = await statusRes.json();
+        setSystemStatus(data);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -168,22 +210,67 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    fetchClients();
+    fetchData();
   }, [isValidAdmin]);
 
-  // 폼 제출
+  // 로그 자동 스크롤
+  useEffect(() => {
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [backfillLogs]);
+
+  // 토큰 검증
+  const validateToken = async () => {
+    if (!formData.meta_ad_account_id || !formData.meta_access_token) {
+      return;
+    }
+
+    setTokenValidating(true);
+    setTokenValidation(null);
+
+    try {
+      const response = await fetch(
+        `https://graph.facebook.com/v22.0/${formData.meta_ad_account_id}?fields=name,account_status&access_token=${formData.meta_access_token}`
+      );
+      const data = await response.json();
+
+      if (data.error) {
+        setTokenValidation({
+          valid: false,
+          error: data.error.message,
+        });
+      } else {
+        setTokenValidation({
+          valid: true,
+          accountName: data.name,
+        });
+      }
+    } catch {
+      setTokenValidation({
+        valid: false,
+        error: 'API 호출 실패',
+      });
+    } finally {
+      setTokenValidating(false);
+    }
+  };
+
+  // 폼 제출 (클라이언트 추가/수정)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
 
     try {
-      const method = editingClient ? 'PUT' : 'POST';
+      const method = editingClient ? 'PATCH' : 'POST';
+      const url = editingClient ? `/api/admin/clients/${editingClient.id}` : '/api/admin/clients';
+
       const body = editingClient
         ? {
-            id: editingClient.id,
             client_name: formData.client_name,
             email: formData.email,
             meta_ad_account_id: formData.meta_ad_account_id || null,
+            meta_access_token: formData.meta_access_token || undefined,
             telegram_chat_id: formData.telegram_chat_id || null,
             plan_type: formData.plan_type,
             target_leads: formData.target_leads ? parseInt(formData.target_leads) : null,
@@ -192,14 +279,14 @@ export default function AdminPage() {
             service_start_date: formData.service_start_date || null,
             service_end_date: formData.service_end_date || null,
             telegram_enabled: formData.telegram_enabled,
-            unlimited_service: formData.unlimited_service
+            unlimited_service: formData.unlimited_service,
           }
         : {
-            client_name: formData.client_name,
+            name: formData.client_name,
             email: formData.email,
-            meta_ad_account_id: formData.meta_ad_account_id || null,
-            meta_access_token: formData.meta_access_token || null,
-            telegram_chat_id: formData.telegram_chat_id || null,
+            account: formData.meta_ad_account_id || null,
+            token: formData.meta_access_token || null,
+            telegram: formData.telegram_chat_id || null,
             plan_type: formData.plan_type,
             target_leads: formData.target_leads ? parseInt(formData.target_leads) : null,
             target_spend: formData.target_spend ? parseFloat(formData.target_spend) : null,
@@ -207,16 +294,16 @@ export default function AdminPage() {
             service_start_date: formData.service_start_date || null,
             service_end_date: formData.service_end_date || null,
             telegram_enabled: formData.telegram_enabled,
-            unlimited_service: formData.unlimited_service
+            unlimited_service: formData.unlimited_service,
           };
 
-      const response = await fetch('/api/clients', {
+      const response = await fetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-key': adminKey || ''
+          'x-admin-key': adminKey || '',
         },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -224,11 +311,11 @@ export default function AdminPage() {
         throw new Error(errorData.error || 'Failed to save client');
       }
 
-      // 성공 시 모달 닫고 목록 새로고침
       setShowModal(false);
       setEditingClient(null);
       setFormData(initialFormData);
-      fetchClients();
+      setTokenValidation(null);
+      fetchData();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error saving client');
     } finally {
@@ -238,23 +325,21 @@ export default function AdminPage() {
 
   // 클라이언트 삭제
   const handleDelete = async (client: Client) => {
-    if (!confirm(`"${client.client_name}" 클라이언트를 완전히 삭제하시겠습니까?\n\n⚠️ 이 작업은 되돌릴 수 없습니다.`)) {
+    if (!confirm(`"${client.client_name}" 클라이언트를 삭제하시겠습니까?`)) {
       return;
     }
 
     try {
-      const response = await fetch(`/api/clients?id=${client.id}`, {
+      const response = await fetch(`/api/admin/clients/${client.id}?hard=true`, {
         method: 'DELETE',
-        headers: {
-          'x-admin-key': adminKey || ''
-        }
+        headers: { 'x-admin-key': adminKey || '' },
       });
 
       if (!response.ok) {
         throw new Error('Failed to delete client');
       }
 
-      fetchClients();
+      fetchData();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error deleting client');
     }
@@ -276,8 +361,9 @@ export default function AdminPage() {
       service_start_date: client.service_start_date || new Date().toISOString().split('T')[0],
       service_end_date: client.service_end_date || '',
       telegram_enabled: client.telegram_enabled ?? true,
-      unlimited_service: client.service_end_date === null
+      unlimited_service: client.service_end_date === null,
     });
+    setTokenValidation(null);
     setShowModal(true);
   };
 
@@ -290,15 +376,14 @@ export default function AdminPage() {
       payment_type: 'monthly',
       memo: '',
       service_months: '3',
-      use_today: true
+      use_today: true,
     });
     setShowPaymentModal(true);
 
-    // 결제 히스토리 조회
     setPaymentLoading(true);
     try {
       const response = await fetch(`/api/payments?client_id=${client.id}`, {
-        headers: { 'x-admin-key': adminKey || '' }
+        headers: { 'x-admin-key': adminKey || '' },
       });
       if (response.ok) {
         const data = await response.json();
@@ -320,7 +405,7 @@ export default function AdminPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-key': adminKey || ''
+          'x-admin-key': adminKey || '',
         },
         body: JSON.stringify({
           client_id: paymentClient.id,
@@ -328,8 +413,8 @@ export default function AdminPage() {
           amount: paymentForm.amount ? parseFloat(paymentForm.amount) : null,
           payment_type: paymentForm.payment_type,
           memo: paymentForm.memo || null,
-          service_months: parseInt(paymentForm.service_months)
-        })
+          service_months: parseInt(paymentForm.service_months),
+        }),
       });
 
       if (!response.ok) {
@@ -339,26 +424,23 @@ export default function AdminPage() {
       const result = await response.json();
       alert(result.message || '결제가 등록되었습니다.');
 
-      // 히스토리 새로고침
       const historyRes = await fetch(`/api/payments?client_id=${paymentClient.id}`, {
-        headers: { 'x-admin-key': adminKey || '' }
+        headers: { 'x-admin-key': adminKey || '' },
       });
       if (historyRes.ok) {
         const data = await historyRes.json();
         setPayments(data.payments || []);
       }
 
-      // 클라이언트 목록 새로고침
-      fetchClients();
+      fetchData();
 
-      // 폼 리셋
       setPaymentForm({
         payment_date: new Date().toISOString().split('T')[0],
         amount: '',
         payment_type: 'monthly',
         memo: '',
         service_months: '3',
-        use_today: true
+        use_today: true,
       });
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error recording payment');
@@ -372,19 +454,19 @@ export default function AdminPage() {
     try {
       const response = await fetch(`/api/payments?id=${paymentId}`, {
         method: 'DELETE',
-        headers: { 'x-admin-key': adminKey || '' }
+        headers: { 'x-admin-key': adminKey || '' },
       });
 
       if (response.ok && paymentClient) {
         const historyRes = await fetch(`/api/payments?client_id=${paymentClient.id}`, {
-          headers: { 'x-admin-key': adminKey || '' }
+          headers: { 'x-admin-key': adminKey || '' },
         });
         if (historyRes.ok) {
           const data = await historyRes.json();
           setPayments(data.payments || []);
         }
       }
-    } catch (err) {
+    } catch {
       alert('삭제 실패');
     }
   };
@@ -393,8 +475,8 @@ export default function AdminPage() {
   const openBackfillModal = (client: Client) => {
     setBackfillClient(client);
     setBackfillResult(null);
+    setBackfillLogs([]);
 
-    // 기본값: 최근 7일
     const today = new Date();
     const weekAgo = new Date(today);
     weekAgo.setDate(today.getDate() - 7);
@@ -402,7 +484,7 @@ export default function AdminPage() {
     setBackfillForm({
       startDate: weekAgo.toISOString().split('T')[0],
       endDate: today.toISOString().split('T')[0],
-      preset: 'last7'
+      preset: 'last7',
     });
     setShowBackfillModal(true);
   };
@@ -422,20 +504,25 @@ export default function AdminPage() {
       case 'last90':
         startDate.setDate(today.getDate() - 90);
         break;
+      case 'last180':
+        startDate.setDate(today.getDate() - 180);
+        break;
+      case 'last365':
+        startDate.setDate(today.getDate() - 365);
+        break;
       case 'custom':
-        // 기존 값 유지
-        setBackfillForm(prev => ({ ...prev, preset: 'custom' }));
+        setBackfillForm((prev) => ({ ...prev, preset: 'custom' }));
         return;
     }
 
     setBackfillForm({
       startDate: startDate.toISOString().split('T')[0],
       endDate: today.toISOString().split('T')[0],
-      preset
+      preset,
     });
   };
 
-  // 백필 실행
+  // 백필 실행 (SSE)
   const handleBackfillSubmit = async () => {
     if (!backfillClient) return;
 
@@ -446,41 +533,90 @@ export default function AdminPage() {
 
     setBackfillLoading(true);
     setBackfillResult(null);
+    setBackfillLogs([]);
 
     try {
-      const response = await fetch('/api/backfill', {
+      const response = await fetch('/api/admin/backfill', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-key': adminKey || ''
+          'x-admin-key': adminKey || '',
         },
         body: JSON.stringify({
           clientId: backfillClient.id,
           startDate: backfillForm.startDate,
-          endDate: backfillForm.endDate
-        })
+          endDate: backfillForm.endDate,
+        }),
       });
 
-      const data = await response.json();
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '백필 요청 실패');
+      }
 
-      if (response.ok) {
-        setBackfillResult({
-          success: true,
-          message: data.message || '백필 작업이 예약되었습니다.'
-        });
-      } else {
-        setBackfillResult({
-          success: false,
-          message: data.error || '백필 요청에 실패했습니다.'
-        });
+      // SSE 스트림 처리
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('스트림을 읽을 수 없습니다.');
+      }
+
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // 이벤트 파싱
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        let eventType = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7);
+          } else if (line.startsWith('data: ') && eventType) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (eventType === 'log') {
+                setBackfillLogs((prev) => [...prev, data]);
+              } else if (eventType === 'progress') {
+                // 진행률은 로그에 포함됨
+              } else if (eventType === 'complete') {
+                setBackfillResult({
+                  success: true,
+                  totalRecords: data.totalRecords,
+                  savedRecords: data.savedRecords,
+                });
+              } else if (eventType === 'error') {
+                setBackfillResult({
+                  success: false,
+                });
+              }
+            } catch {
+              // JSON 파싱 실패 무시
+            }
+            eventType = '';
+          }
+        }
       }
     } catch (err) {
-      setBackfillResult({
-        success: false,
-        message: '백필 요청 중 오류가 발생했습니다.'
-      });
+      setBackfillLogs((prev) => [
+        ...prev,
+        {
+          time: new Date().toLocaleTimeString('ko-KR', { hour12: false }),
+          type: 'error',
+          message: err instanceof Error ? err.message : '백필 실패',
+        },
+      ]);
+      setBackfillResult({ success: false });
     } finally {
       setBackfillLoading(false);
+      fetchData(); // 데이터 새로고침
     }
   };
 
@@ -488,6 +624,7 @@ export default function AdminPage() {
   const openCreateModal = () => {
     setEditingClient(null);
     setFormData(initialFormData);
+    setTokenValidation(null);
     setShowModal(true);
   };
 
@@ -519,19 +656,27 @@ export default function AdminPage() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Users className="w-8 h-8 text-blue-600" />
-            <h1 className="text-xl font-bold text-neutral-900">클라이언트 관리</h1>
+            <h1 className="text-xl font-bold text-neutral-900">BAS Meta Ads - Admin</h1>
           </div>
-          <button
-            onClick={openCreateModal}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-5 h-5" />
-            새 클라이언트
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={fetchData}
+              className="p-2 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors"
+              title="새로고침"
+            >
+              <RefreshCw className="w-5 h-5" />
+            </button>
+            <button
+              onClick={openCreateModal}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+              새 클라이언트
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* 메인 컨텐츠 */}
       <main className="max-w-7xl mx-auto px-6 py-8">
         {loading ? (
           <div className="flex items-center justify-center h-64">
@@ -539,163 +684,277 @@ export default function AdminPage() {
           </div>
         ) : error ? (
           <div className="bg-red-50 text-red-600 p-4 rounded-lg">{error}</div>
-        ) : clients.length === 0 ? (
-          <div className="bg-white rounded-xl p-12 text-center">
-            <Building2 className="w-16 h-16 text-neutral-300 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-neutral-900 mb-2">클라이언트가 없습니다</h2>
-            <p className="text-neutral-600 mb-6">새 클라이언트를 추가해보세요.</p>
-            <button
-              onClick={openCreateModal}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              <Plus className="w-5 h-5" />
-              새 클라이언트 추가
-            </button>
-          </div>
         ) : (
-          <div className="grid gap-4">
-            {clients.map((client) => (
-              <div
-                key={client.id}
-                className={`bg-white rounded-xl p-6 border ${
-                  client.is_active ? 'border-neutral-200' : 'border-red-200 bg-red-50/30'
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-lg font-semibold text-neutral-900">
-                        {client.client_name}
-                      </h3>
-                      <span
-                        className={`px-2 py-0.5 text-xs rounded-full ${
-                          client.is_active
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-red-100 text-red-700'
-                        }`}
-                      >
-                        {client.is_active ? '활성' : '비활성'}
-                      </span>
-                      <span className="px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700">
-                        {client.plan_type}
-                      </span>
-                    </div>
+          <>
+            {/* 시스템 현황 카드 */}
+            {systemStatus && (
+              <div className="bg-white rounded-xl border border-neutral-200 p-6 mb-6">
+                <div
+                  className="flex items-center justify-between cursor-pointer"
+                  onClick={() => setShowSystemDetails(!showSystemDetails)}
+                >
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-blue-600" />
+                    시스템 현황
+                  </h2>
+                  {showSystemDetails ? (
+                    <ChevronUp className="w-5 h-5 text-neutral-400" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-neutral-400" />
+                  )}
+                </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm text-neutral-600">
-                      <div className="flex items-center gap-2">
-                        <Mail className="w-4 h-4" />
-                        {client.email}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <CreditCard className="w-4 h-4" />
-                        {client.meta_ad_account_id || '미설정'}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <MessageCircle className="w-4 h-4" />
-                        {client.telegram_chat_id || '미설정'}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Target className="w-4 h-4" />
-                        목표: {client.targets?.target_leads || '-'}리드 / $
-                        {client.targets?.target_spend?.toLocaleString() || '-'}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4" />
-                        서비스: {client.service_start_date || '-'} ~ {client.service_end_date === null ? (
-                          <span className="text-blue-600 font-medium">무제한</span>
-                        ) : (
-                          client.service_end_date || '-'
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {client.telegram_enabled ? (
-                          <>
-                            <Bell className="w-4 h-4 text-green-600" />
-                            <span className="text-green-600">알림 ON</span>
-                          </>
-                        ) : (
-                          <>
-                            <BellOff className="w-4 h-4 text-neutral-400" />
-                            <span className="text-neutral-400">알림 OFF</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 대시보드 URL */}
-                    <div className="mt-4 flex items-center gap-2">
-                      <code className="text-xs bg-neutral-100 px-3 py-1.5 rounded-lg text-neutral-600 flex-1 truncate">
-                        {`${typeof window !== 'undefined' ? window.location.origin : ''}/?client=${client.id}`}
-                      </code>
-                      <button
-                        onClick={() => copyDashboardUrl(client.id)}
-                        className="p-2 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors"
-                        title="URL 복사"
-                      >
-                        {copiedId === client.id ? (
-                          <Check className="w-4 h-4 text-green-600" />
-                        ) : (
-                          <Copy className="w-4 h-4" />
-                        )}
-                      </button>
-                      <a
-                        href={`/?client=${client.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors"
-                        title="대시보드 열기"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
+                {/* 요약 카드 */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <div className="text-sm text-blue-600 font-medium">활성 클라이언트</div>
+                    <div className="text-2xl font-bold text-blue-700">{systemStatus.clients.active}</div>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-4">
+                    <div className="text-sm text-green-600 font-medium">오늘 수집</div>
+                    <div className="text-2xl font-bold text-green-700">
+                      {systemStatus.dataCollection.todayRecords.toLocaleString()}건
                     </div>
                   </div>
-
-                  {/* 액션 버튼 */}
-                  <div className="flex items-center gap-2 ml-4">
-                    <button
-                      onClick={() => openBackfillModal(client)}
-                      className="p-2 text-neutral-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                      title="데이터 백필"
-                    >
-                      <Database className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => openPaymentModal(client)}
-                      className="p-2 text-neutral-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                      title="결제 관리"
-                    >
-                      <DollarSign className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => openEditModal(client)}
-                      className="p-2 text-neutral-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                      title="수정"
-                    >
-                      <Edit2 className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(client)}
-                      className="p-2 text-neutral-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="삭제"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
+                  <div className="bg-purple-50 rounded-lg p-4">
+                    <div className="text-sm text-purple-600 font-medium">7일 리드</div>
+                    <div className="text-2xl font-bold text-purple-700">
+                      {systemStatus.recent7Days.leads.toLocaleString()}건
+                    </div>
+                  </div>
+                  <div className="bg-amber-50 rounded-lg p-4">
+                    <div className="text-sm text-amber-600 font-medium">7일 지출</div>
+                    <div className="text-2xl font-bold text-amber-700">
+                      {systemStatus.recent7Days.spend.toLocaleString()}원
+                    </div>
                   </div>
                 </div>
+
+                {/* 상세 정보 */}
+                {showSystemDetails && (
+                  <div className="mt-6 space-y-4">
+                    {/* 경고 */}
+                    {(systemStatus.clients.expiringSoon > 0 || systemStatus.dataCollection.missingDataClients > 0) && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                        <h3 className="font-semibold text-amber-800 flex items-center gap-2 mb-2">
+                          <AlertTriangle className="w-5 h-5" />
+                          주의 필요
+                        </h3>
+                        <ul className="text-sm text-amber-700 space-y-1">
+                          {systemStatus.clients.expiringSoon > 0 && (
+                            <li>• 서비스 만료 예정: {systemStatus.clients.expiringList.map((c) => c.name).join(', ')}</li>
+                          )}
+                          {systemStatus.dataCollection.missingDataClients > 0 && (
+                            <li>• 데이터 누락: {systemStatus.dataCollection.missingList.map((c) => c.name).join(', ')}</li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* 7일 성과 상세 */}
+                    <div className="bg-neutral-50 rounded-lg p-4">
+                      <h3 className="font-semibold text-neutral-700 flex items-center gap-2 mb-3">
+                        <TrendingUp className="w-5 h-5" />
+                        최근 7일 전체 성과
+                      </h3>
+                      <div className="grid grid-cols-3 md:grid-cols-6 gap-4 text-sm">
+                        <div>
+                          <span className="text-neutral-500">노출</span>
+                          <div className="font-semibold">{systemStatus.recent7Days.impressions.toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <span className="text-neutral-500">클릭</span>
+                          <div className="font-semibold">{systemStatus.recent7Days.clicks.toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <span className="text-neutral-500">리드</span>
+                          <div className="font-semibold">{systemStatus.recent7Days.leads.toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <span className="text-neutral-500">지출</span>
+                          <div className="font-semibold">{systemStatus.recent7Days.spend.toLocaleString()}원</div>
+                        </div>
+                        <div>
+                          <span className="text-neutral-500">CTR</span>
+                          <div className="font-semibold">{systemStatus.recent7Days.ctr}%</div>
+                        </div>
+                        <div>
+                          <span className="text-neutral-500">CPL</span>
+                          <div className="font-semibold">{systemStatus.recent7Days.cpl.toLocaleString()}원</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
+            )}
+
+            {/* 클라이언트 목록 */}
+            {clients.length === 0 ? (
+              <div className="bg-white rounded-xl p-12 text-center">
+                <Building2 className="w-16 h-16 text-neutral-300 mx-auto mb-4" />
+                <h2 className="text-xl font-semibold text-neutral-900 mb-2">클라이언트가 없습니다</h2>
+                <p className="text-neutral-600 mb-6">새 클라이언트를 추가해보세요.</p>
+                <button
+                  onClick={openCreateModal}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  <Plus className="w-5 h-5" />
+                  새 클라이언트 추가
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold text-neutral-800">
+                  클라이언트 목록 ({clients.length}개)
+                </h2>
+                <div className="grid gap-4">
+                  {clients.map((client) => (
+                    <div
+                      key={client.id}
+                      className={`bg-white rounded-xl p-6 border ${
+                        client.is_active ? 'border-neutral-200' : 'border-red-200 bg-red-50/30'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="text-lg font-semibold text-neutral-900">{client.client_name}</h3>
+                            <span
+                              className={`px-2 py-0.5 text-xs rounded-full ${
+                                client.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                              }`}
+                            >
+                              {client.is_active ? '활성' : '비활성'}
+                            </span>
+                            <span className="px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700">
+                              {client.plan_type}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm text-neutral-600">
+                            <div className="flex items-center gap-2">
+                              <Mail className="w-4 h-4" />
+                              {client.email}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <CreditCard className="w-4 h-4" />
+                              {client.meta_ad_account_id || '미설정'}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <MessageCircle className="w-4 h-4" />
+                              {client.telegram_chat_id || '미설정'}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Target className="w-4 h-4" />
+                              목표: {client.targets?.target_leads || '-'}리드 / {client.targets?.target_spend?.toLocaleString() || '-'}원
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Calendar className="w-4 h-4" />
+                              서비스: {client.service_start_date || '-'} ~{' '}
+                              {client.service_end_date === null ? (
+                                <span className="text-blue-600 font-medium">무제한</span>
+                              ) : (
+                                client.service_end_date || '-'
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {client.telegram_enabled ? (
+                                <>
+                                  <Bell className="w-4 h-4 text-green-600" />
+                                  <span className="text-green-600">알림 ON</span>
+                                </>
+                              ) : (
+                                <>
+                                  <BellOff className="w-4 h-4 text-neutral-400" />
+                                  <span className="text-neutral-400">알림 OFF</span>
+                                </>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Database className="w-4 h-4" />
+                              데이터: {client.dataCount.toLocaleString()}건
+                              {client.latestDataDate && (
+                                <span className="text-neutral-400">(~{client.latestDataDate})</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 대시보드 URL */}
+                          <div className="mt-4 flex items-center gap-2">
+                            <code className="text-xs bg-neutral-100 px-3 py-1.5 rounded-lg text-neutral-600 flex-1 truncate">
+                              {`${typeof window !== 'undefined' ? window.location.origin : ''}/?client=${client.id}`}
+                            </code>
+                            <button
+                              onClick={() => copyDashboardUrl(client.id)}
+                              className="p-2 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors"
+                              title="URL 복사"
+                            >
+                              {copiedId === client.id ? (
+                                <Check className="w-4 h-4 text-green-600" />
+                              ) : (
+                                <Copy className="w-4 h-4" />
+                              )}
+                            </button>
+                            <a
+                              href={`/?client=${client.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-2 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors"
+                              title="대시보드 열기"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                          </div>
+                        </div>
+
+                        {/* 액션 버튼 */}
+                        <div className="flex items-center gap-2 ml-4">
+                          <button
+                            onClick={() => openBackfillModal(client)}
+                            className="p-2 text-neutral-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                            title="데이터 백필"
+                          >
+                            <Database className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => openPaymentModal(client)}
+                            className="p-2 text-neutral-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                            title="결제 관리"
+                          >
+                            <DollarSign className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => openEditModal(client)}
+                            className="p-2 text-neutral-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="수정"
+                          >
+                            <Edit2 className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(client)}
+                            className="p-2 text-neutral-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="삭제"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </main>
 
-      {/* 모달 */}
+      {/* 클라이언트 추가/수정 모달 */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-neutral-200 flex items-center justify-between">
-              <h2 className="text-xl font-semibold">
-                {editingClient ? '클라이언트 수정' : '새 클라이언트'}
-              </h2>
+              <h2 className="text-xl font-semibold">{editingClient ? '클라이언트 수정' : '새 클라이언트'}</h2>
               <button
                 onClick={() => setShowModal(false)}
                 className="p-2 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg"
@@ -721,16 +980,13 @@ export default function AdminPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1">
-                  이메일 <span className="text-red-500">*</span>
-                </label>
+                <label className="block text-sm font-medium text-neutral-700 mb-1">이메일</label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="contact@example.com"
-                  required
+                  placeholder="contact@example.com (자동 생성됨)"
                 />
               </div>
 
@@ -740,9 +996,7 @@ export default function AdminPage() {
 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-1">
-                      Meta 광고계정 ID
-                    </label>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">Meta 광고계정 ID</label>
                     <div className="flex">
                       <span className="inline-flex items-center px-3 text-sm text-neutral-600 bg-neutral-100 border border-r-0 border-neutral-300 rounded-l-lg">
                         act_
@@ -753,35 +1007,44 @@ export default function AdminPage() {
                         onChange={(e) => {
                           const value = e.target.value.replace(/\D/g, '');
                           setFormData({ ...formData, meta_ad_account_id: value ? `act_${value}` : '' });
+                          setTokenValidation(null);
                         }}
                         className="flex-1 px-4 py-2 border border-neutral-300 rounded-r-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="123456789"
                       />
                     </div>
-                    <p className="mt-1 text-xs text-neutral-500">
-                      비즈니스 설정 → 광고 계정에서 확인 (숫자만 입력)
-                    </p>
                   </div>
 
-                  {!editingClient && (
-                    <div>
-                      <label className="block text-sm font-medium text-neutral-700 mb-1">
-                        Meta Access Token
-                      </label>
-                      <input
-                        type="password"
-                        value={formData.meta_access_token}
-                        onChange={(e) =>
-                          setFormData({ ...formData, meta_access_token: e.target.value })
-                        }
-                        className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="장기 액세스 토큰"
-                      />
-                      <p className="mt-1 text-xs text-neutral-500">
-                        Meta Business Suite에서 발급받은 장기 토큰
-                      </p>
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">
+                      Meta Access Token {editingClient && '(비워두면 기존 유지)'}
+                    </label>
+                    <input
+                      type="password"
+                      value={formData.meta_access_token}
+                      onChange={(e) => {
+                        setFormData({ ...formData, meta_access_token: e.target.value });
+                        setTokenValidation(null);
+                      }}
+                      className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="장기 액세스 토큰"
+                    />
+                    <div className="mt-2 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={validateToken}
+                        disabled={!formData.meta_ad_account_id || !formData.meta_access_token || tokenValidating}
+                        className="px-3 py-1 text-sm bg-neutral-100 text-neutral-700 rounded-lg hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {tokenValidating ? '검증 중...' : '토큰 검증'}
+                      </button>
+                      {tokenValidation && (
+                        <span className={`text-sm ${tokenValidation.valid ? 'text-green-600' : 'text-red-600'}`}>
+                          {tokenValidation.valid ? `✅ ${tokenValidation.accountName}` : `❌ ${tokenValidation.error}`}
+                        </span>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
               </div>
 
@@ -791,21 +1054,14 @@ export default function AdminPage() {
 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-1">
-                      텔레그램 채팅 ID
-                    </label>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">텔레그램 채팅 ID</label>
                     <input
                       type="text"
                       value={formData.telegram_chat_id}
-                      onChange={(e) =>
-                        setFormData({ ...formData, telegram_chat_id: e.target.value })
-                      }
+                      onChange={(e) => setFormData({ ...formData, telegram_chat_id: e.target.value })}
                       className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="-1001234567890"
                     />
-                    <p className="mt-1 text-xs text-neutral-500">
-                      리포트를 받을 텔레그램 채팅/그룹 ID
-                    </p>
                   </div>
 
                   <div className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg">
@@ -815,9 +1071,7 @@ export default function AdminPage() {
                       ) : (
                         <BellOff className="w-5 h-5 text-neutral-400" />
                       )}
-                      <span className="text-sm font-medium text-neutral-700">
-                        텔레그램 리포트 발송
-                      </span>
+                      <span className="text-sm font-medium text-neutral-700">텔레그램 리포트 발송</span>
                     </div>
                     <button
                       type="button"
@@ -843,9 +1097,7 @@ export default function AdminPage() {
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-neutral-700 mb-1">
-                        서비스 시작일
-                      </label>
+                      <label className="block text-sm font-medium text-neutral-700 mb-1">서비스 시작일</label>
                       <input
                         type="date"
                         value={formData.service_start_date}
@@ -854,16 +1106,15 @@ export default function AdminPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-neutral-700 mb-1">
-                        서비스 종료일
-                      </label>
+                      <label className="block text-sm font-medium text-neutral-700 mb-1">서비스 종료일</label>
                       <input
                         type="date"
                         value={formData.service_end_date}
-                        onChange={(e) => setFormData({ ...formData, service_end_date: e.target.value, unlimited_service: false })}
+                        onChange={(e) =>
+                          setFormData({ ...formData, service_end_date: e.target.value, unlimited_service: false })
+                        }
                         disabled={formData.unlimited_service}
                         className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-neutral-100 disabled:text-neutral-400"
-                        placeholder="무제한"
                       />
                     </div>
                   </div>
@@ -872,14 +1123,14 @@ export default function AdminPage() {
                     <input
                       type="checkbox"
                       checked={formData.unlimited_service}
-                      onChange={(e) => setFormData({ ...formData, unlimited_service: e.target.checked, service_end_date: '' })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, unlimited_service: e.target.checked, service_end_date: '' })
+                      }
                       className="w-5 h-5 rounded border-neutral-300 text-blue-600 focus:ring-blue-500"
                     />
                     <div>
                       <span className="text-sm font-medium text-neutral-700">무제한 서비스</span>
-                      <p className="text-xs text-neutral-500">
-                        체크하면 서비스 종료일이 없이 무기한 사용 가능합니다
-                      </p>
+                      <p className="text-xs text-neutral-500">체크하면 서비스 종료일이 없이 무기한 사용</p>
                     </div>
                   </label>
                 </div>
@@ -891,9 +1142,7 @@ export default function AdminPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-1">
-                      플랜 타입
-                    </label>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">플랜 타입</label>
                     <select
                       value={formData.plan_type}
                       onChange={(e) => setFormData({ ...formData, plan_type: e.target.value })}
@@ -906,9 +1155,7 @@ export default function AdminPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-1">
-                      월 목표 리드
-                    </label>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">월 목표 리드</label>
                     <input
                       type="number"
                       value={formData.target_leads}
@@ -919,30 +1166,24 @@ export default function AdminPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-1">
-                      월 목표 예산 ($)
-                    </label>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">월 목표 예산 (원)</label>
                     <input
                       type="number"
-                      step="0.01"
                       value={formData.target_spend}
                       onChange={(e) => setFormData({ ...formData, target_spend: e.target.value })}
                       className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="1000"
+                      placeholder="1000000"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-1">
-                      목표 CPL ($)
-                    </label>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">목표 CPL (원)</label>
                     <input
                       type="number"
-                      step="0.01"
                       value={formData.target_cpl}
                       onChange={(e) => setFormData({ ...formData, target_cpl: e.target.value })}
                       className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="10"
+                      placeholder="10000"
                     />
                   </div>
                 </div>
@@ -996,7 +1237,6 @@ export default function AdminPage() {
                 </h3>
 
                 <div className="grid grid-cols-2 gap-4">
-                  {/* 결제일 선택 */}
                   <div className="col-span-2">
                     <div className="flex gap-4 mb-2">
                       <label className="flex items-center gap-2 cursor-pointer">
@@ -1029,9 +1269,7 @@ export default function AdminPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-1">
-                      결제 금액 (원)
-                    </label>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">결제 금액 (원)</label>
                     <input
                       type="number"
                       value={paymentForm.amount}
@@ -1042,9 +1280,7 @@ export default function AdminPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-1">
-                      서비스 기간 (개월)
-                    </label>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">서비스 기간 (개월)</label>
                     <select
                       value={paymentForm.service_months}
                       onChange={(e) => setPaymentForm({ ...paymentForm, service_months: e.target.value })}
@@ -1058,9 +1294,7 @@ export default function AdminPage() {
                   </div>
 
                   <div className="col-span-2">
-                    <label className="block text-sm font-medium text-neutral-700 mb-1">
-                      메모
-                    </label>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">메모</label>
                     <input
                       type="text"
                       value={paymentForm.memo}
@@ -1092,31 +1326,24 @@ export default function AdminPage() {
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
                   </div>
                 ) : payments.length === 0 ? (
-                  <div className="text-center py-8 text-neutral-500">
-                    결제 기록이 없습니다
-                  </div>
+                  <div className="text-center py-8 text-neutral-500">결제 기록이 없습니다</div>
                 ) : (
                   <div className="space-y-2">
                     {payments.map((payment) => (
-                      <div
-                        key={payment.id}
-                        className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg"
-                      >
+                      <div key={payment.id} className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg">
                         <div className="flex-1">
                           <div className="flex items-center gap-3">
                             <span className="font-medium">{payment.payment_date}</span>
                             {payment.amount && (
                               <span className="text-green-600 font-semibold">
-                                ₩{payment.amount.toLocaleString()}
+                                {payment.amount.toLocaleString()}원
                               </span>
                             )}
                             <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
                               +{payment.service_months}개월
                             </span>
                           </div>
-                          {payment.memo && (
-                            <p className="text-sm text-neutral-500 mt-1">{payment.memo}</p>
-                          )}
+                          {payment.memo && <p className="text-sm text-neutral-500 mt-1">{payment.memo}</p>}
                         </div>
                         <button
                           onClick={() => handleDeletePayment(payment.id)}
@@ -1135,7 +1362,7 @@ export default function AdminPage() {
               <div className="bg-neutral-100 rounded-lg p-4">
                 <h4 className="text-sm font-medium text-neutral-600 mb-2">현재 서비스 기간</h4>
                 <p className="text-lg font-semibold">
-                  {paymentClient.service_start_date || '-'} ~ {' '}
+                  {paymentClient.service_start_date || '-'} ~{' '}
                   {paymentClient.service_end_date === null ? (
                     <span className="text-blue-600">무제한</span>
                   ) : (
@@ -1157,10 +1384,10 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* 백필 모달 */}
+      {/* 백필 모달 (SSE 실시간 로그) */}
       {showBackfillModal && backfillClient && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-neutral-200 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-semibold flex items-center gap-2">
@@ -1171,40 +1398,46 @@ export default function AdminPage() {
               </div>
               <button
                 onClick={() => setShowBackfillModal(false)}
-                className="p-2 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg"
+                disabled={backfillLoading}
+                className="p-2 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg disabled:opacity-50"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-6 overflow-y-auto flex-1">
               {/* 안내 메시지 */}
               <div className="bg-purple-50 rounded-lg p-4 text-sm text-purple-800">
                 <p className="font-medium mb-1">📊 데이터 백필이란?</p>
-                <p>Meta API에서 과거 광고 데이터를 가져와 데이터베이스에 저장합니다. 새 클라이언트 등록 후 또는 데이터 누락 시 사용하세요.</p>
+                <p>
+                  Meta API에서 과거 광고 데이터를 가져와 데이터베이스에 저장합니다.
+                  <br />
+                  90일 초과 시 30일 단위로 자동 분할됩니다.
+                </p>
               </div>
 
               {/* 기간 프리셋 */}
               <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-2">
-                  수집 기간 선택
-                </label>
-                <div className="grid grid-cols-4 gap-2">
+                <label className="block text-sm font-medium text-neutral-700 mb-2">수집 기간 선택</label>
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
                   {[
                     { value: 'last7', label: '7일' },
                     { value: 'last30', label: '30일' },
                     { value: 'last90', label: '90일' },
-                    { value: 'custom', label: '직접 입력' }
+                    { value: 'last180', label: '180일' },
+                    { value: 'last365', label: '1년' },
+                    { value: 'custom', label: '직접입력' },
                   ].map((preset) => (
                     <button
                       key={preset.value}
                       type="button"
                       onClick={() => handleBackfillPresetChange(preset.value)}
+                      disabled={backfillLoading}
                       className={`py-2 px-3 text-sm rounded-lg border transition-colors ${
                         backfillForm.preset === preset.value
                           ? 'bg-purple-600 text-white border-purple-600'
                           : 'bg-white text-neutral-700 border-neutral-300 hover:border-purple-400'
-                      }`}
+                      } disabled:opacity-50`}
                     >
                       {preset.label}
                     </button>
@@ -1215,25 +1448,23 @@ export default function AdminPage() {
               {/* 날짜 입력 */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">
-                    시작일
-                  </label>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1">시작일</label>
                   <input
                     type="date"
                     value={backfillForm.startDate}
                     onChange={(e) => setBackfillForm({ ...backfillForm, startDate: e.target.value, preset: 'custom' })}
-                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    disabled={backfillLoading}
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 disabled:opacity-50"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">
-                    종료일
-                  </label>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1">종료일</label>
                   <input
                     type="date"
                     value={backfillForm.endDate}
                     onChange={(e) => setBackfillForm({ ...backfillForm, endDate: e.target.value, preset: 'custom' })}
-                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    disabled={backfillLoading}
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -1243,21 +1474,53 @@ export default function AdminPage() {
                 <div className="bg-neutral-100 rounded-lg p-3 text-sm">
                   <span className="text-neutral-600">수집 기간: </span>
                   <span className="font-medium">
-                    {backfillForm.startDate} ~ {backfillForm.endDate}
-                    {' '}
-                    ({Math.ceil((new Date(backfillForm.endDate).getTime() - new Date(backfillForm.startDate).getTime()) / (1000 * 60 * 60 * 24))}일)
+                    {backfillForm.startDate} ~ {backfillForm.endDate} (
+                    {Math.ceil(
+                      (new Date(backfillForm.endDate).getTime() - new Date(backfillForm.startDate).getTime()) /
+                        (1000 * 60 * 60 * 24)
+                    )}
+                    일)
                   </span>
+                </div>
+              )}
+
+              {/* 실시간 로그 */}
+              {backfillLogs.length > 0 && (
+                <div className="border border-neutral-200 rounded-lg">
+                  <div className="bg-neutral-800 text-white px-4 py-2 rounded-t-lg text-sm font-medium">실행 로그</div>
+                  <div className="bg-neutral-900 text-green-400 p-4 rounded-b-lg h-64 overflow-y-auto font-mono text-xs">
+                    {backfillLogs.map((log, index) => (
+                      <div
+                        key={index}
+                        className={`mb-1 ${
+                          log.type === 'error'
+                            ? 'text-red-400'
+                            : log.type === 'warning'
+                            ? 'text-yellow-400'
+                            : log.type === 'success'
+                            ? 'text-green-400'
+                            : 'text-neutral-300'
+                        }`}
+                      >
+                        <span className="text-neutral-500">[{log.time}]</span> {log.message}
+                      </div>
+                    ))}
+                    <div ref={logsEndRef} />
+                  </div>
                 </div>
               )}
 
               {/* 결과 메시지 */}
               {backfillResult && (
-                <div className={`rounded-lg p-4 ${
-                  backfillResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-                }`}>
+                <div
+                  className={`rounded-lg p-4 ${
+                    backfillResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+                  }`}
+                >
                   <p className="font-medium">
-                    {backfillResult.success ? '✅ ' : '❌ '}
-                    {backfillResult.message}
+                    {backfillResult.success
+                      ? `✅ 백필 완료! 총 ${backfillResult.totalRecords?.toLocaleString()}건 수집, ${backfillResult.savedRecords?.toLocaleString()}건 저장`
+                      : '❌ 백필 실패. 로그를 확인하세요.'}
                   </p>
                 </div>
               )}
@@ -1283,16 +1546,17 @@ export default function AdminPage() {
 
               {/* 주의사항 */}
               <div className="text-xs text-neutral-500 space-y-1">
-                <p>• 최대 90일까지 한 번에 백필 가능합니다.</p>
-                <p>• 백필 작업은 큐에 추가되어 순차적으로 처리됩니다.</p>
+                <p>• 90일 초과 백필은 30일 단위로 자동 분할됩니다.</p>
                 <p>• 이미 있는 데이터는 덮어쓰기됩니다.</p>
+                <p>• 실행 중 창을 닫으면 진행 상황을 확인할 수 없습니다.</p>
               </div>
             </div>
 
             <div className="p-6 border-t border-neutral-200">
               <button
                 onClick={() => setShowBackfillModal(false)}
-                className="w-full py-2 border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 transition-colors"
+                disabled={backfillLoading}
+                className="w-full py-2 border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 transition-colors disabled:opacity-50"
               >
                 닫기
               </button>
