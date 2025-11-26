@@ -28,6 +28,7 @@ import {
   getAllAdsWithStatus,
   getClientTargets,
   getKPISparklineData,
+  getLastDataCollectionDate,
   Filters,
   ClientTargets,
   AdWithStatus
@@ -80,6 +81,9 @@ export default function Home() {
     cpl: number[];
     ctr: number[];
   }>({ leads: [], spend: [], cpl: [], ctr: [] });
+
+  // 마지막 데이터 수집일
+  const [lastCollectionDate, setLastCollectionDate] = useState<string | null>(null);
 
   // 접근 제어 검증
   useEffect(() => {
@@ -159,7 +163,7 @@ export default function Home() {
           endDate: filters.endDate || format(today, 'yyyy-MM-dd')
         };
 
-        const [kpiData, trendData, allTrendData, platformData, adsData, allAdsData, targetsData, sparkData] = await Promise.all([
+        const [kpiData, trendData, allTrendData, platformData, adsData, allAdsData, targetsData, sparkData, lastDate] = await Promise.all([
           getKPISummary(filters),
           getDailyTrend(trendFilters),
           getAllDailyTrend(effectiveClientId || undefined), // 전체 기간 데이터 (기간별 데이터 탭용)
@@ -167,7 +171,8 @@ export default function Home() {
           getTopAds(filters, 10),
           getAllAdsWithStatus(effectiveClientId || undefined), // ⚠️ 클라이언트별 광고만 조회
           getClientTargets(effectiveClientId || undefined),
-          getKPISparklineData(filters)
+          getKPISparklineData(filters),
+          getLastDataCollectionDate(effectiveClientId || undefined)
         ]);
 
         setKpi(kpiData);
@@ -178,6 +183,7 @@ export default function Home() {
         setAllAds(allAdsData); // 전체 광고 저장
         setTargets(targetsData);
         setSparklineData(sparkData);
+        setLastCollectionDate(lastDate);
 
         // 비교 모드가 활성화되고 비교 날짜가 설정된 경우
         if (compareMode !== 'none' && comparisonDates) {
@@ -579,7 +585,11 @@ export default function Home() {
             <div className="flex flex-col items-center gap-1 md:flex-row md:gap-4 text-xs md:text-sm text-gray-500 order-1 md:order-2">
               <span>문의: mkt@polarad.co.kr</span>
               <span className="hidden md:inline text-gray-300">|</span>
-              <span>데이터 업데이트: 매일 오전 9시</span>
+              <span>
+                마지막 수집: {lastCollectionDate
+                  ? format(new Date(lastCollectionDate), 'yyyy-MM-dd')
+                  : '정보 없음'}
+              </span>
             </div>
           </div>
         </div>
