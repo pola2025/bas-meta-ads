@@ -8,6 +8,7 @@ export interface DailyTrend {
   ctr: number;
   cvr: number;
   cpl: number;
+  avg_watch_time?: number; // 평균 시청시간 (초)
 }
 
 // 플랫폼별 성과
@@ -32,6 +33,7 @@ export interface KPISummary {
   total_impressions: number;
   total_clicks: number;
   avg_cvr: number;
+  avg_watch_time?: number; // 평균 시청시간 (초)
   dataPoints?: number; // 실제 조회된 행 수
 }
 
@@ -49,6 +51,7 @@ export interface TopAd {
   cpc: number;
   cvr: number;
   impressions: number;
+  avg_watch_time?: number; // 평균 시청시간 (초)
 }
 
 // 필터

@@ -21,6 +21,7 @@ interface DailyData {
   ctr: number;
   impressions: number;
   clicks: number;
+  avg_watch_time: number;
 }
 
 interface WeeklyData {
@@ -32,6 +33,7 @@ interface WeeklyData {
   ctr: number;
   impressions: number;
   clicks: number;
+  avg_watch_time: number;
   days: DailyData[];
 }
 
@@ -44,6 +46,7 @@ interface MonthlyData {
   ctr: number;
   impressions: number;
   clicks: number;
+  avg_watch_time: number;
   leadsDiff?: number;
   spendDiff?: number;
   cplDiff?: number;
@@ -68,7 +71,8 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
         cpl: d.leads > 0 ? d.spend / d.leads : 0,
         ctr: d.impressions > 0 ? (d.clicks / d.impressions) * 100 : 0,
         impressions: d.impressions,
-        clicks: d.clicks
+        clicks: d.clicks,
+        avg_watch_time: d.avg_watch_time || 0
       }));
   };
 
@@ -91,6 +95,10 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
         const totalSpend = weekItems.reduce((sum, d) => sum + d.spend, 0);
         const totalImpressions = weekItems.reduce((sum, d) => sum + d.impressions, 0);
         const totalClicks = weekItems.reduce((sum, d) => sum + d.clicks, 0);
+        const watchTimeData = weekItems.filter(d => d.avg_watch_time && d.avg_watch_time > 0);
+        const avgWatchTime = watchTimeData.length > 0
+          ? watchTimeData.reduce((sum, d) => sum + (d.avg_watch_time || 0), 0) / watchTimeData.length
+          : 0;
 
         const weekStart = parseISO(key);
         const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
@@ -105,6 +113,7 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
           ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
           impressions: totalImpressions,
           clicks: totalClicks,
+          avg_watch_time: avgWatchTime,
           days: convertToDailyData(weekItems)
         };
       })
@@ -131,6 +140,10 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
         const totalSpend = monthItems.reduce((sum, d) => sum + d.spend, 0);
         const totalImpressions = monthItems.reduce((sum, d) => sum + d.impressions, 0);
         const totalClicks = monthItems.reduce((sum, d) => sum + d.clicks, 0);
+        const watchTimeData = monthItems.filter(d => d.avg_watch_time && d.avg_watch_time > 0);
+        const avgWatchTime = watchTimeData.length > 0
+          ? watchTimeData.reduce((sum, d) => sum + (d.avg_watch_time || 0), 0) / watchTimeData.length
+          : 0;
 
         return {
           month: monthKey,
@@ -141,6 +154,7 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
           ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
           impressions: totalImpressions,
           clicks: totalClicks,
+          avg_watch_time: avgWatchTime,
           weeks: aggregateWeekly(monthItems),
           days: convertToDailyData(monthItems)
         };
@@ -207,6 +221,13 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
   const formatCurrency = (num: number) => `$${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const formatNumber = (num: number) => num.toLocaleString();
   const formatPercentage = (num: number) => `${num.toFixed(2)}%`;
+  const formatWatchTime = (seconds: number) => {
+    if (!seconds || seconds === 0) return '-';
+    if (seconds < 60) return `${seconds.toFixed(1)}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   // 전체 요약 통계
   const summary = useMemo(() => {
@@ -215,6 +236,10 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
     const totalSpend = monthlyData.reduce((sum, d) => sum + d.spend, 0);
     const totalImpressions = monthlyData.reduce((sum, d) => sum + d.impressions, 0);
     const totalClicks = monthlyData.reduce((sum, d) => sum + d.clicks, 0);
+    const watchTimeData = monthlyData.filter(d => d.avg_watch_time && d.avg_watch_time > 0);
+    const avgWatchTime = watchTimeData.length > 0
+      ? watchTimeData.reduce((sum, d) => sum + d.avg_watch_time, 0) / watchTimeData.length
+      : 0;
 
     return {
       totalLeads,
@@ -222,7 +247,8 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
       avgCpl: totalLeads > 0 ? totalSpend / totalLeads : 0,
       avgCtr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
       totalImpressions,
-      totalClicks
+      totalClicks,
+      avgWatchTime
     };
   }, [monthlyData]);
 
@@ -430,6 +456,7 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-28">지출</th>
               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">CPL</th>
               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">CTR</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">시청</th>
               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-28">노출</th>
               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">클릭</th>
             </tr>
@@ -464,6 +491,9 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
                 </td>
                 <td className="px-4 py-3 text-center">
                   <span className="text-sm text-gray-900">{formatPercentage(month.ctr)}</span>
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className="text-sm text-purple-600">{formatWatchTime(month.avg_watch_time)}</span>
                 </td>
                 <td className="px-4 py-3 text-center">
                   <span className="text-sm text-gray-600">{formatNumber(month.impressions)}</span>
@@ -508,6 +538,9 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
                       <span className="text-sm font-bold text-green-900">{formatPercentage(week.ctr)}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
+                      <span className="text-sm font-bold text-purple-600">{formatWatchTime(week.avg_watch_time)}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
                       <span className="text-sm font-bold text-green-900">{formatNumber(week.impressions)}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -532,6 +565,9 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
                       </td>
                       <td className="px-4 py-2 text-center">
                         <span className="text-sm text-gray-900">{formatPercentage(day.ctr)}</span>
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        <span className="text-sm text-purple-600">{formatWatchTime(day.avg_watch_time)}</span>
                       </td>
                       <td className="px-4 py-2 text-center">
                         <span className="text-sm text-gray-600">{formatNumber(day.impressions)}</span>
@@ -579,6 +615,9 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
                       <span className="text-sm font-bold text-blue-900">{formatPercentage(month.ctr)}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
+                      <span className="text-sm font-bold text-purple-600">{formatWatchTime(month.avg_watch_time)}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
                       <span className="text-sm font-bold text-blue-900">{formatNumber(month.impressions)}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -603,6 +642,9 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
                       </td>
                       <td className="px-4 py-2 text-center">
                         <span className="text-sm text-gray-900">{formatPercentage(day.ctr)}</span>
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        <span className="text-sm text-purple-600">{formatWatchTime(day.avg_watch_time)}</span>
                       </td>
                       <td className="px-4 py-2 text-center">
                         <span className="text-sm text-gray-600">{formatNumber(day.impressions)}</span>
@@ -643,8 +685,8 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
               <p className="text-lg font-bold text-gray-900">{formatPercentage(summary.avgCtr)}</p>
             </div>
           </div>
-          {/* PC: 6열 그리드 */}
-          <div className="hidden md:grid grid-cols-6 gap-4 text-center">
+          {/* PC: 7열 그리드 */}
+          <div className="hidden md:grid grid-cols-7 gap-4 text-center">
             <div>
               <p className="text-xs text-gray-500">총 리드</p>
               <p className="text-lg font-bold text-gray-900">{formatNumber(summary.totalLeads)}</p>
@@ -660,6 +702,10 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
             <div>
               <p className="text-xs text-gray-500">평균 CTR</p>
               <p className="text-lg font-bold text-gray-900">{formatPercentage(summary.avgCtr)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">평균 시청</p>
+              <p className="text-lg font-bold text-purple-600">{formatWatchTime(summary.avgWatchTime)}</p>
             </div>
             <div>
               <p className="text-xs text-gray-500">총 노출</p>

@@ -24,7 +24,7 @@ export async function getAllDailyTrend(clientId?: string): Promise<DailyTrend[]>
     while (hasMore) {
       let query = supabase
         .from('ads_insights_daily')
-        .select('date, impressions, clicks, leads, spend');
+        .select('date, impressions, clicks, leads, spend, avg_watch_time');
 
       if (clientId) {
         query = query.eq('client_id', clientId);
@@ -52,7 +52,7 @@ export async function getAllDailyTrend(clientId?: string): Promise<DailyTrend[]>
     const data = allData;
 
     // 날짜별로 집계
-    const aggregated = (data || []).reduce((acc: Record<string, DailyTrend>, row: any) => {
+    const aggregated = (data || []).reduce((acc: Record<string, DailyTrend & { _watchTimeSum: number; _watchTimeCount: number }>, row: any) => {
       const date = row.date;
       if (!acc[date]) {
         acc[date] = {
@@ -63,22 +63,34 @@ export async function getAllDailyTrend(clientId?: string): Promise<DailyTrend[]>
           spend: 0,
           ctr: 0,
           cvr: 0,
-          cpl: 0
+          cpl: 0,
+          avg_watch_time: 0,
+          _watchTimeSum: 0,
+          _watchTimeCount: 0
         };
       }
       acc[date].impressions += row.impressions || 0;
       acc[date].clicks += row.clicks || 0;
       acc[date].leads += row.leads || 0;
       acc[date].spend += row.spend || 0;
+      if (row.avg_watch_time) {
+        acc[date]._watchTimeSum += row.avg_watch_time;
+        acc[date]._watchTimeCount += 1;
+      }
       return acc;
     }, {});
 
     // 집계된 데이터에서 비율 계산
     const result = Object.values(aggregated).map((item) => ({
-      ...item,
+      date: item.date,
+      impressions: item.impressions,
+      clicks: item.clicks,
+      leads: item.leads,
+      spend: item.spend,
       ctr: item.impressions > 0 ? (item.clicks / item.impressions) * 100 : 0,
       cvr: item.clicks > 0 ? (item.leads / item.clicks) * 100 : 0,
-      cpl: item.leads > 0 ? item.spend / item.leads : 0
+      cpl: item.leads > 0 ? item.spend / item.leads : 0,
+      avg_watch_time: item._watchTimeCount > 0 ? item._watchTimeSum / item._watchTimeCount : 0
     }));
 
     return result.sort((a, b) => a.date.localeCompare(b.date));
@@ -95,7 +107,7 @@ export async function getDailyTrend(filters?: Filters): Promise<DailyTrend[]> {
 
     let query = supabase
       .from('ads_insights_daily')
-      .select('date, impressions, clicks, leads, spend, ctr, cvr, cpl');
+      .select('date, impressions, clicks, leads, spend, ctr, cvr, cpl, avg_watch_time');
 
     // 필터 적용
     if (filters?.clientId) {
@@ -131,7 +143,7 @@ export async function getDailyTrend(filters?: Filters): Promise<DailyTrend[]> {
     console.log('📈 getDailyTrend: Rows returned before aggregation:', data?.length || 0);
 
     // 날짜별로 집계
-    const aggregated = (data || []).reduce((acc: Record<string, DailyTrend>, row: any) => {
+    const aggregated = (data || []).reduce((acc: Record<string, DailyTrend & { _watchTimeSum: number; _watchTimeCount: number }>, row: any) => {
       const date = row.date;
       if (!acc[date]) {
         acc[date] = {
@@ -142,22 +154,34 @@ export async function getDailyTrend(filters?: Filters): Promise<DailyTrend[]> {
           spend: 0,
           ctr: 0,
           cvr: 0,
-          cpl: 0
+          cpl: 0,
+          avg_watch_time: 0,
+          _watchTimeSum: 0,
+          _watchTimeCount: 0
         };
       }
       acc[date].impressions += row.impressions || 0;
       acc[date].clicks += row.clicks || 0;
       acc[date].leads += row.leads || 0;
       acc[date].spend += row.spend || 0;
+      if (row.avg_watch_time) {
+        acc[date]._watchTimeSum += row.avg_watch_time;
+        acc[date]._watchTimeCount += 1;
+      }
       return acc;
     }, {});
 
     // 집계된 데이터에서 비율 계산
     const result = Object.values(aggregated).map((item) => ({
-      ...item,
+      date: item.date,
+      impressions: item.impressions,
+      clicks: item.clicks,
+      leads: item.leads,
+      spend: item.spend,
       ctr: item.impressions > 0 ? (item.clicks / item.impressions) * 100 : 0,
       cvr: item.clicks > 0 ? (item.leads / item.clicks) * 100 : 0,
-      cpl: item.leads > 0 ? item.spend / item.leads : 0
+      cpl: item.leads > 0 ? item.spend / item.leads : 0,
+      avg_watch_time: item._watchTimeCount > 0 ? item._watchTimeSum / item._watchTimeCount : 0
     }));
 
     return result.sort((a, b) => a.date.localeCompare(b.date));
@@ -247,7 +271,7 @@ export async function getKPISummary(filters?: Filters): Promise<KPISummary> {
 
     let query = supabase
       .from('ads_insights_daily')
-      .select('impressions, clicks, leads, spend, date');
+      .select('impressions, clicks, leads, spend, date, avg_watch_time');
 
     // 필터 적용
     if (filters?.clientId) {
@@ -320,6 +344,12 @@ export async function getKPISummary(filters?: Filters): Promise<KPISummary> {
     const total_leads = data.reduce((sum, d) => sum + (d.leads || 0), 0);
     const total_spend = data.reduce((sum, d) => sum + (d.spend || 0), 0);
 
+    // 평균 시청시간 계산 (가중 평균)
+    const watchTimeData = data.filter(d => d.avg_watch_time && d.avg_watch_time > 0);
+    const avg_watch_time = watchTimeData.length > 0
+      ? watchTimeData.reduce((sum, d) => sum + (d.avg_watch_time || 0), 0) / watchTimeData.length
+      : 0;
+
     // 🔍 DEBUG: 집계 결과
     console.log('💰 Total spend:', total_spend);
     console.log('🎯 Total leads:', total_leads);
@@ -333,6 +363,7 @@ export async function getKPISummary(filters?: Filters): Promise<KPISummary> {
       total_impressions,
       total_clicks,
       avg_cvr: total_clicks > 0 ? (total_leads / total_clicks) * 100 : 0,
+      avg_watch_time,
       dataPoints: data.length
     };
   } catch (error) {
@@ -345,6 +376,7 @@ export async function getKPISummary(filters?: Filters): Promise<KPISummary> {
       total_impressions: 0,
       total_clicks: 0,
       avg_cvr: 0,
+      avg_watch_time: 0,
       dataPoints: 0
     };
   }
@@ -652,7 +684,7 @@ export async function getTopAds(filters?: Filters, limit: number = 10): Promise<
   try {
     let query = supabase
       .from('ads_insights_daily')
-      .select('ad_name, campaign_name, platform, leads, spend, clicks, impressions');
+      .select('ad_name, campaign_name, platform, leads, spend, clicks, impressions, avg_watch_time');
 
     // 필터 적용
     if (filters?.clientId) {
@@ -692,13 +724,19 @@ export async function getTopAds(filters?: Filters, limit: number = 10): Promise<
           clicks: 0,
           impressions: 0,
           ctr: 0,
-          cpl: 0
+          cpl: 0,
+          _watchTimeSum: 0,
+          _watchTimeCount: 0
         };
       }
       acc[key].leads += row.leads || 0;
       acc[key].spend += row.spend || 0;
       acc[key].clicks += row.clicks || 0;
       acc[key].impressions += row.impressions || 0;
+      if (row.avg_watch_time) {
+        acc[key]._watchTimeSum += row.avg_watch_time;
+        acc[key]._watchTimeCount += 1;
+      }
       return acc;
     }, {});
 
@@ -715,7 +753,8 @@ export async function getTopAds(filters?: Filters, limit: number = 10): Promise<
       ctr: item.impressions > 0 ? (item.clicks / item.impressions) * 100 : 0,
       cpc: item.clicks > 0 ? item.spend / item.clicks : 0,
       cvr: item.clicks > 0 ? (item.leads / item.clicks) * 100 : 0,
-      cpl: item.leads > 0 ? item.spend / item.leads : 0
+      cpl: item.leads > 0 ? item.spend / item.leads : 0,
+      avg_watch_time: item._watchTimeCount > 0 ? item._watchTimeSum / item._watchTimeCount : 0
     }));
 
     // leads 기준 내림차순 정렬 후 limit 적용
@@ -740,7 +779,7 @@ export async function getAllAdsWithStatus(clientId?: string): Promise<AdWithStat
     // 모든 광고 데이터 조회 (날짜 포함)
     let query = supabase
       .from('ads_insights_daily')
-      .select('ad_name, campaign_name, platform, leads, spend, clicks, impressions, date')
+      .select('ad_name, campaign_name, platform, leads, spend, clicks, impressions, date, avg_watch_time')
       .order('date', { ascending: false })
       .range(0, 5000);
 
@@ -776,13 +815,19 @@ export async function getAllAdsWithStatus(clientId?: string): Promise<AdWithStat
           clicks: 0,
           impressions: 0,
           lastActiveDate: row.date,
-          firstActiveDate: row.date
+          firstActiveDate: row.date,
+          _watchTimeSum: 0,
+          _watchTimeCount: 0
         };
       }
       acc[key].leads += row.leads || 0;
       acc[key].spend += row.spend || 0;
       acc[key].clicks += row.clicks || 0;
       acc[key].impressions += row.impressions || 0;
+      if (row.avg_watch_time) {
+        acc[key]._watchTimeSum += row.avg_watch_time;
+        acc[key]._watchTimeCount += 1;
+      }
       // 날짜 업데이트
       if (row.date > acc[key].lastActiveDate) acc[key].lastActiveDate = row.date;
       if (row.date < acc[key].firstActiveDate) acc[key].firstActiveDate = row.date;
@@ -803,6 +848,7 @@ export async function getAllAdsWithStatus(clientId?: string): Promise<AdWithStat
       cpc: item.clicks > 0 ? item.spend / item.clicks : 0,
       cvr: item.clicks > 0 ? (item.leads / item.clicks) * 100 : 0,
       cpl: item.leads > 0 ? item.spend / item.leads : 0,
+      avg_watch_time: item._watchTimeCount > 0 ? item._watchTimeSum / item._watchTimeCount : 0,
       isActive: item.lastActiveDate >= threeDaysAgoStr,
       lastActiveDate: item.lastActiveDate,
       firstActiveDate: item.firstActiveDate

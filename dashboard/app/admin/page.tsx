@@ -83,6 +83,7 @@ interface SystemStatus {
     spend: number;
     ctr: number;
     cpl: number;
+    avg_watch_time: number;
   };
   reports: {
     latestSentAt: string | null;
@@ -885,7 +886,7 @@ export default function AdminPage() {
                   <div className="bg-amber-50 rounded-lg p-4">
                     <div className="text-sm text-amber-600 font-medium">7일 지출</div>
                     <div className="text-2xl font-bold text-amber-700">
-                      {systemStatus.recent7Days.spend.toLocaleString()}원
+                      ${systemStatus.recent7Days.spend.toLocaleString()}
                     </div>
                   </div>
                 </div>
@@ -917,7 +918,7 @@ export default function AdminPage() {
                         <TrendingUp className="w-5 h-5" />
                         최근 7일 전체 성과
                       </h3>
-                      <div className="grid grid-cols-3 md:grid-cols-6 gap-4 text-sm">
+                      <div className="grid grid-cols-3 md:grid-cols-7 gap-4 text-sm">
                         <div>
                           <span className="text-neutral-500">노출</span>
                           <div className="font-semibold">{systemStatus.recent7Days.impressions.toLocaleString()}</div>
@@ -932,7 +933,7 @@ export default function AdminPage() {
                         </div>
                         <div>
                           <span className="text-neutral-500">지출</span>
-                          <div className="font-semibold">{systemStatus.recent7Days.spend.toLocaleString()}원</div>
+                          <div className="font-semibold">${systemStatus.recent7Days.spend.toLocaleString()}</div>
                         </div>
                         <div>
                           <span className="text-neutral-500">CTR</span>
@@ -940,7 +941,18 @@ export default function AdminPage() {
                         </div>
                         <div>
                           <span className="text-neutral-500">CPL</span>
-                          <div className="font-semibold">{systemStatus.recent7Days.cpl.toLocaleString()}원</div>
+                          <div className="font-semibold">${systemStatus.recent7Days.cpl.toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <span className="text-neutral-500">평균 시청</span>
+                          <div className="font-semibold text-purple-600">
+                            {systemStatus.recent7Days.avg_watch_time
+                              ? systemStatus.recent7Days.avg_watch_time < 60
+                                ? `${systemStatus.recent7Days.avg_watch_time.toFixed(1)}s`
+                                : `${Math.floor(systemStatus.recent7Days.avg_watch_time / 60)}:${String(Math.round(systemStatus.recent7Days.avg_watch_time % 60)).padStart(2, '0')}`
+                              : '-'
+                            }
+                          </div>
                         </div>
                       </div>
                     </div>

@@ -18,7 +18,7 @@ import { ComparisonSection } from '@/components/ComparisonSection';
 import { DashboardSkeleton } from '@/components/Skeleton';
 import { PeriodDataTable } from '@/components/PeriodDataTable';
 import { Accordion } from '@/components/Accordion';
-import { TrendingUp, DollarSign, Target, MousePointerClick, Lock } from 'lucide-react';
+import { TrendingUp, DollarSign, Target, MousePointerClick, Lock, Clock } from 'lucide-react';
 import {
   getKPISummary,
   getDailyTrend,
@@ -420,7 +420,7 @@ export default function Home() {
           {/* KPI 카드 영역 */}
           <section>
             <h2 className="text-lg sm:text-2xl font-bold mb-3 sm:mb-4">주요 지표</h2>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6">
               <KPICard
                 title="총 리드"
                 value={kpi.total_leads}
@@ -460,6 +460,19 @@ export default function Home() {
                 target={targets?.target_ctr || undefined}
                 sparklineData={sparklineData.ctr}
                 colorScheme="green"
+              />
+              <KPICard
+                title="평균 시청시간"
+                value={kpi.avg_watch_time
+                  ? kpi.avg_watch_time < 60
+                    ? `${kpi.avg_watch_time.toFixed(1)}s`
+                    : `${Math.floor(kpi.avg_watch_time / 60)}:${Math.round(kpi.avg_watch_time % 60).toString().padStart(2, '0')}`
+                  : '-'
+                }
+                icon={Clock}
+                format="number"
+                trend={calculateTrend(kpi.avg_watch_time || 0, comparisonKpi?.avg_watch_time)}
+                colorScheme="purple"
               />
             </div>
           </section>

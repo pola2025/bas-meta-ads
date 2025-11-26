@@ -12,7 +12,7 @@ interface AdsDetailTableProps {
   onAdClick?: (ad: TopAd) => void
 }
 
-type SortKey = 'ad_name' | 'spend' | 'impressions' | 'clicks' | 'cpc' | 'leads' | 'cpl' | 'ctr' | 'cvr' | 'isActive' | 'lastActiveDate'
+type SortKey = 'ad_name' | 'spend' | 'impressions' | 'clicks' | 'cpc' | 'leads' | 'cpl' | 'ctr' | 'cvr' | 'isActive' | 'lastActiveDate' | 'avg_watch_time'
 type SortDirection = 'asc' | 'desc'
 
 export function AdsDetailTable({ data, onAdClick }: AdsDetailTableProps) {
@@ -92,6 +92,14 @@ export function AdsDetailTable({ data, onAdClick }: AdsDetailTableProps) {
     } catch {
       return dateStr
     }
+  }
+
+  const formatWatchTime = (seconds?: number) => {
+    if (!seconds || seconds === 0) return '-'
+    if (seconds < 60) return `${seconds.toFixed(1)}s`
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.round(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
   // 최대 리드 수 계산 (프로그레스 바용)
@@ -243,7 +251,7 @@ export function AdsDetailTable({ data, onAdClick }: AdsDetailTableProps) {
                     </span>
                   </div>
                   {/* 상세 지표 그리드 */}
-                  <div className="grid grid-cols-4 gap-2 text-center">
+                  <div className="grid grid-cols-5 gap-2 text-center">
                     <div className="bg-gray-50 rounded py-1.5">
                       <p className="text-[9px] text-gray-500">지출</p>
                       <p className={`text-[11px] font-bold ${ad.isActive ? 'text-gray-900' : 'text-gray-500'}`}>
@@ -266,6 +274,12 @@ export function AdsDetailTable({ data, onAdClick }: AdsDetailTableProps) {
                       <p className="text-[9px] text-gray-500">CVR</p>
                       <p className={`text-[11px] font-bold ${ad.isActive ? 'text-teal-600' : 'text-teal-400'}`}>
                         {ad.cvr.toFixed(1)}%
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 rounded py-1.5">
+                      <p className="text-[9px] text-gray-500">시청</p>
+                      <p className={`text-[11px] font-bold ${ad.isActive ? 'text-purple-600' : 'text-purple-400'}`}>
+                        {formatWatchTime(ad.avg_watch_time)}
                       </p>
                     </div>
                   </div>
@@ -350,6 +364,12 @@ export function AdsDetailTable({ data, onAdClick }: AdsDetailTableProps) {
                 onClick={() => handleSort('cvr')}
               >
                 CVR <SortIcon column="cvr" />
+              </th>
+              <th
+                className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 w-16"
+                onClick={() => handleSort('avg_watch_time')}
+              >
+                시청 <SortIcon column="avg_watch_time" />
               </th>
             </tr>
           </thead>
@@ -485,6 +505,12 @@ export function AdsDetailTable({ data, onAdClick }: AdsDetailTableProps) {
                       <TrendingUp className="w-3 h-3 text-green-600 ml-1" />
                     )}
                   </div>
+                </td>
+                {/* 평균 시청시간 */}
+                <td className="px-4 py-3 text-center">
+                  <span className={`text-sm ${ad.isActive ? 'text-purple-600' : 'text-purple-400'}`}>
+                    {formatWatchTime(ad.avg_watch_time)}
+                  </span>
                 </td>
               </tr>
             ))}

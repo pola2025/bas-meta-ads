@@ -68,10 +68,10 @@ export async function GET(request: NextRequest) {
 
     const { data: recentData } = await supabaseAdmin
       .from('raw_data')
-      .select('impressions, clicks, leads, spend')
+      .select('impressions, clicks, leads, spend, avg_watch_time')
       .gte('date', since);
 
-    let recent7DaysTotals = { impressions: 0, clicks: 0, leads: 0, spend: 0 };
+    let recent7DaysTotals = { impressions: 0, clicks: 0, leads: 0, spend: 0, watchTimeSum: 0, watchTimeCount: 0 };
     if (recentData && recentData.length > 0) {
       recent7DaysTotals = recentData.reduce(
         (acc, row) => ({
@@ -79,8 +79,10 @@ export async function GET(request: NextRequest) {
           clicks: acc.clicks + (row.clicks || 0),
           leads: acc.leads + (row.leads || 0),
           spend: acc.spend + (parseFloat(row.spend as any) || 0),
+          watchTimeSum: acc.watchTimeSum + (row.avg_watch_time ? parseFloat(row.avg_watch_time as any) : 0),
+          watchTimeCount: acc.watchTimeCount + (row.avg_watch_time ? 1 : 0),
         }),
-        { impressions: 0, clicks: 0, leads: 0, spend: 0 }
+        { impressions: 0, clicks: 0, leads: 0, spend: 0, watchTimeSum: 0, watchTimeCount: 0 }
       );
     }
 
@@ -159,7 +161,7 @@ export async function GET(request: NextRequest) {
         impressions: recent7DaysTotals.impressions,
         clicks: recent7DaysTotals.clicks,
         leads: recent7DaysTotals.leads,
-        spend: Math.round(recent7DaysTotals.spend),
+        spend: Math.round(recent7DaysTotals.spend * 100) / 100,
         ctr:
           recent7DaysTotals.impressions > 0
             ? parseFloat(
@@ -168,7 +170,11 @@ export async function GET(request: NextRequest) {
             : 0,
         cpl:
           recent7DaysTotals.leads > 0
-            ? Math.round(recent7DaysTotals.spend / recent7DaysTotals.leads)
+            ? Math.round(recent7DaysTotals.spend / recent7DaysTotals.leads * 100) / 100
+            : 0,
+        avg_watch_time:
+          recent7DaysTotals.watchTimeCount > 0
+            ? Math.round(recent7DaysTotals.watchTimeSum / recent7DaysTotals.watchTimeCount * 10) / 10
             : 0,
       },
 
