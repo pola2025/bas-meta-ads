@@ -320,91 +320,57 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 7일 이하: 즉시 실행
-    // 7일 초과: 텔레그램 알림 후 응답 (실제 실행은 Worker에서)
-    const IMMEDIATE_THRESHOLD = 14; // 14일까지 즉시 실행
+    // 90일까지 즉시 실행
+    console.log(`🚀 Starting backfill for ${client.client_name}: ${startDate} ~ ${endDate} (${daysDiff} days)`);
 
-    if (daysDiff <= IMMEDIATE_THRESHOLD) {
-      // === 즉시 실행 모드 ===
-      console.log(`🚀 Starting immediate backfill for ${client.client_name}: ${startDate} ~ ${endDate}`);
+    try {
+      // 1. Meta API에서 데이터 수집
+      const insights = await fetchMetaAdsData(
+        client.meta_ad_account_id,
+        accessToken,
+        startDate,
+        endDate
+      );
 
-      try {
-        // 1. Meta API에서 데이터 수집
-        const insights = await fetchMetaAdsData(
-          client.meta_ad_account_id,
-          accessToken,
-          startDate,
-          endDate
-        );
+      console.log(`📊 Fetched ${insights.length} records from Meta API`);
 
-        console.log(`📊 Fetched ${insights.length} records from Meta API`);
+      // 2. raw_data에 저장
+      const savedCount = await saveRawData(clientId, insights);
+      console.log(`💾 Saved ${savedCount} records to raw_data`);
 
-        // 2. raw_data에 저장
-        const savedCount = await saveRawData(clientId, insights);
-        console.log(`💾 Saved ${savedCount} records to raw_data`);
+      // 3. daily_aggregates 동기화
+      await syncDailyAggregates(clientId, startDate, endDate);
+      console.log(`📈 Daily aggregates synced`);
 
-        // 3. daily_aggregates 동기화
-        await syncDailyAggregates(clientId, startDate, endDate);
-        console.log(`📈 Daily aggregates synced`);
+      // 4. 텔레그램 알림
+      await sendBackfillNotification(
+        client.client_name,
+        startDate,
+        endDate,
+        insights.length,
+        savedCount,
+        true
+      );
 
-        // 4. 텔레그램 알림 (관리자에게)
-        await sendBackfillNotification(
-          client.client_name,
-          startDate,
-          endDate,
-          insights.length,
-          savedCount,
-          true
-        );
-
-        return NextResponse.json({
-          success: true,
-          message: `백필 완료: ${client.client_name} (${startDate} ~ ${endDate})`,
-          job: {
-            clientId,
-            clientName: client.client_name,
-            startDate,
-            endDate,
-            status: 'completed',
-            days: daysDiff,
-            recordsFetched: insights.length,
-            recordsSaved: savedCount,
-            executionMode: 'immediate'
-          }
-        });
-
-      } catch (fetchError: any) {
-        console.error('Backfill execution failed:', fetchError);
-
-        // 실패 알림
-        await sendBackfillNotification(
-          client.client_name,
+      return NextResponse.json({
+        success: true,
+        message: `백필 완료: ${client.client_name} (${startDate} ~ ${endDate})`,
+        job: {
+          clientId,
+          clientName: client.client_name,
           startDate,
           endDate,
-          0,
-          0,
-          false,
-          fetchError.message
-        );
+          status: 'completed',
+          days: daysDiff,
+          recordsFetched: insights.length,
+          recordsSaved: savedCount
+        }
+      });
 
-        return NextResponse.json({
-          success: false,
-          error: `백필 실행 실패: ${fetchError.message}`,
-          job: {
-            clientId,
-            clientName: client.client_name,
-            startDate,
-            endDate,
-            status: 'failed',
-            days: daysDiff,
-            executionMode: 'immediate'
-          }
-        }, { status: 500 });
-      }
+    } catch (fetchError: any) {
+      console.error('Backfill execution failed:', fetchError);
 
-    } else {
-      // === 큐 모드 (14일 초과) ===
-      // 텔레그램으로 안내 메시지만 보내고, 수동 실행 안내
+      // 실패 알림
       await sendBackfillNotification(
         client.client_name,
         startDate,
@@ -412,23 +378,21 @@ export async function POST(request: NextRequest) {
         0,
         0,
         false,
-        `기간이 ${daysDiff}일로 길어 수동 실행이 필요합니다. 서버에서 다음 명령어를 실행하세요:\nnode lib/backfill.js ${startDate} ${endDate}`
+        fetchError.message
       );
 
       return NextResponse.json({
-        success: true,
-        message: `백필 요청이 접수되었습니다. 기간이 ${daysDiff}일로 길어 서버에서 수동 실행이 필요합니다.`,
+        success: false,
+        error: `백필 실행 실패: ${fetchError.message}`,
         job: {
           clientId,
           clientName: client.client_name,
           startDate,
           endDate,
-          status: 'manual_required',
-          days: daysDiff,
-          executionMode: 'queue',
-          instruction: `서버에서 실행: node lib/backfill.js ${startDate} ${endDate}`
+          status: 'failed',
+          days: daysDiff
         }
-      });
+      }, { status: 500 });
     }
 
   } catch (error: any) {
