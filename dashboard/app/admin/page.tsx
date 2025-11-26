@@ -21,7 +21,11 @@ import {
   BellOff,
   DollarSign,
   History,
-  CalendarPlus
+  CalendarPlus,
+  Database,
+  RefreshCw,
+  Play,
+  Loader2
 } from 'lucide-react';
 
 interface ClientTargets {
@@ -122,6 +126,17 @@ export default function AdminPage() {
     memo: '',
     service_months: '3',
     use_today: true // true면 오늘 날짜, false면 직접 지정
+  });
+
+  // 백필 모달 상태
+  const [showBackfillModal, setShowBackfillModal] = useState(false);
+  const [backfillClient, setBackfillClient] = useState<Client | null>(null);
+  const [backfillLoading, setBackfillLoading] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [backfillForm, setBackfillForm] = useState({
+    startDate: '',
+    endDate: '',
+    preset: 'custom' // 'last7', 'last30', 'last90', 'custom'
   });
 
   // 관리자 키 검증
@@ -374,6 +389,101 @@ export default function AdminPage() {
     }
   };
 
+  // 백필 모달 열기
+  const openBackfillModal = (client: Client) => {
+    setBackfillClient(client);
+    setBackfillResult(null);
+
+    // 기본값: 최근 7일
+    const today = new Date();
+    const weekAgo = new Date(today);
+    weekAgo.setDate(today.getDate() - 7);
+
+    setBackfillForm({
+      startDate: weekAgo.toISOString().split('T')[0],
+      endDate: today.toISOString().split('T')[0],
+      preset: 'last7'
+    });
+    setShowBackfillModal(true);
+  };
+
+  // 백필 프리셋 변경
+  const handleBackfillPresetChange = (preset: string) => {
+    const today = new Date();
+    let startDate = new Date(today);
+
+    switch (preset) {
+      case 'last7':
+        startDate.setDate(today.getDate() - 7);
+        break;
+      case 'last30':
+        startDate.setDate(today.getDate() - 30);
+        break;
+      case 'last90':
+        startDate.setDate(today.getDate() - 90);
+        break;
+      case 'custom':
+        // 기존 값 유지
+        setBackfillForm(prev => ({ ...prev, preset: 'custom' }));
+        return;
+    }
+
+    setBackfillForm({
+      startDate: startDate.toISOString().split('T')[0],
+      endDate: today.toISOString().split('T')[0],
+      preset
+    });
+  };
+
+  // 백필 실행
+  const handleBackfillSubmit = async () => {
+    if (!backfillClient) return;
+
+    if (!backfillForm.startDate || !backfillForm.endDate) {
+      alert('시작일과 종료일을 선택해주세요.');
+      return;
+    }
+
+    setBackfillLoading(true);
+    setBackfillResult(null);
+
+    try {
+      const response = await fetch('/api/backfill', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey || ''
+        },
+        body: JSON.stringify({
+          clientId: backfillClient.id,
+          startDate: backfillForm.startDate,
+          endDate: backfillForm.endDate
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setBackfillResult({
+          success: true,
+          message: data.message || '백필 작업이 예약되었습니다.'
+        });
+      } else {
+        setBackfillResult({
+          success: false,
+          message: data.error || '백필 요청에 실패했습니다.'
+        });
+      }
+    } catch (err) {
+      setBackfillResult({
+        success: false,
+        message: '백필 요청 중 오류가 발생했습니다.'
+      });
+    } finally {
+      setBackfillLoading(false);
+    }
+  };
+
   // 새 클라이언트 모달 열기
   const openCreateModal = () => {
     setEditingClient(null);
@@ -542,6 +652,13 @@ export default function AdminPage() {
 
                   {/* 액션 버튼 */}
                   <div className="flex items-center gap-2 ml-4">
+                    <button
+                      onClick={() => openBackfillModal(client)}
+                      className="p-2 text-neutral-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                      title="데이터 백필"
+                    >
+                      <Database className="w-5 h-5" />
+                    </button>
                     <button
                       onClick={() => openPaymentModal(client)}
                       className="p-2 text-neutral-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
@@ -1031,6 +1148,150 @@ export default function AdminPage() {
             <div className="p-6 border-t border-neutral-200">
               <button
                 onClick={() => setShowPaymentModal(false)}
+                className="w-full py-2 border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 transition-colors"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 백필 모달 */}
+      {showBackfillModal && backfillClient && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg">
+            <div className="p-6 border-b border-neutral-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <Database className="w-6 h-6 text-purple-600" />
+                  데이터 백필
+                </h2>
+                <p className="text-sm text-neutral-500 mt-1">{backfillClient.client_name}</p>
+              </div>
+              <button
+                onClick={() => setShowBackfillModal(false)}
+                className="p-2 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* 안내 메시지 */}
+              <div className="bg-purple-50 rounded-lg p-4 text-sm text-purple-800">
+                <p className="font-medium mb-1">📊 데이터 백필이란?</p>
+                <p>Meta API에서 과거 광고 데이터를 가져와 데이터베이스에 저장합니다. 새 클라이언트 등록 후 또는 데이터 누락 시 사용하세요.</p>
+              </div>
+
+              {/* 기간 프리셋 */}
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-2">
+                  수집 기간 선택
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { value: 'last7', label: '7일' },
+                    { value: 'last30', label: '30일' },
+                    { value: 'last90', label: '90일' },
+                    { value: 'custom', label: '직접 입력' }
+                  ].map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => handleBackfillPresetChange(preset.value)}
+                      className={`py-2 px-3 text-sm rounded-lg border transition-colors ${
+                        backfillForm.preset === preset.value
+                          ? 'bg-purple-600 text-white border-purple-600'
+                          : 'bg-white text-neutral-700 border-neutral-300 hover:border-purple-400'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 날짜 입력 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                    시작일
+                  </label>
+                  <input
+                    type="date"
+                    value={backfillForm.startDate}
+                    onChange={(e) => setBackfillForm({ ...backfillForm, startDate: e.target.value, preset: 'custom' })}
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                    종료일
+                  </label>
+                  <input
+                    type="date"
+                    value={backfillForm.endDate}
+                    onChange={(e) => setBackfillForm({ ...backfillForm, endDate: e.target.value, preset: 'custom' })}
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              {/* 기간 요약 */}
+              {backfillForm.startDate && backfillForm.endDate && (
+                <div className="bg-neutral-100 rounded-lg p-3 text-sm">
+                  <span className="text-neutral-600">수집 기간: </span>
+                  <span className="font-medium">
+                    {backfillForm.startDate} ~ {backfillForm.endDate}
+                    {' '}
+                    ({Math.ceil((new Date(backfillForm.endDate).getTime() - new Date(backfillForm.startDate).getTime()) / (1000 * 60 * 60 * 24))}일)
+                  </span>
+                </div>
+              )}
+
+              {/* 결과 메시지 */}
+              {backfillResult && (
+                <div className={`rounded-lg p-4 ${
+                  backfillResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+                }`}>
+                  <p className="font-medium">
+                    {backfillResult.success ? '✅ ' : '❌ '}
+                    {backfillResult.message}
+                  </p>
+                </div>
+              )}
+
+              {/* 실행 버튼 */}
+              <button
+                onClick={handleBackfillSubmit}
+                disabled={backfillLoading || !backfillForm.startDate || !backfillForm.endDate}
+                className="w-full py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {backfillLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    백필 실행 중...
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-5 h-5" />
+                    백필 실행
+                  </>
+                )}
+              </button>
+
+              {/* 주의사항 */}
+              <div className="text-xs text-neutral-500 space-y-1">
+                <p>• 최대 90일까지 한 번에 백필 가능합니다.</p>
+                <p>• 백필 작업은 큐에 추가되어 순차적으로 처리됩니다.</p>
+                <p>• 이미 있는 데이터는 덮어쓰기됩니다.</p>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-neutral-200">
+              <button
+                onClick={() => setShowBackfillModal(false)}
                 className="w-full py-2 border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 transition-colors"
               >
                 닫기
