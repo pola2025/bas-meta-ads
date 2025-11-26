@@ -484,8 +484,110 @@ cron.schedule('0 9 * * 1', async () => {
   timezone: "Asia/Seoul"
 });
 
+// 서비스 만료 임박 알림 (관리자 전용)
+const ADMIN_CHAT_ID = '-1003394139746';
+
+async function checkExpiringServices() {
+  console.log("\n🔔 Checking expiring services...");
+
+  try {
+    const today = new Date();
+    const sevenDaysLater = new Date(today);
+    sevenDaysLater.setDate(today.getDate() + 7);
+    const todayStr = today.toISOString().split('T')[0];
+    const sevenDaysLaterStr = sevenDaysLater.toISOString().split('T')[0];
+
+    // 7일 이내 만료 예정인 클라이언트 조회
+    const { data: expiringClients, error } = await supabase
+      .from('clients')
+      .select('id, client_name, email, service_start_date, service_end_date, telegram_enabled')
+      .eq('is_active', true)
+      .not('service_end_date', 'is', null)
+      .gte('service_end_date', todayStr)
+      .lte('service_end_date', sevenDaysLaterStr)
+      .order('service_end_date', { ascending: true });
+
+    if (error) {
+      console.error("❌ Error fetching expiring clients:", error);
+      return;
+    }
+
+    if (!expiringClients || expiringClients.length === 0) {
+      console.log("✅ No expiring services in the next 7 days");
+      return;
+    }
+
+    console.log(`⚠️ Found ${expiringClients.length} expiring client(s)`);
+
+    // 알림 메시지 구성
+    let message = `
+⚠️ [BAS] 서비스 만료 임박 알림
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔔 7일 이내 만료 예정 클라이언트:
+
+`;
+
+    expiringClients.forEach((client, index) => {
+      const endDate = new Date(client.service_end_date);
+      const daysLeft = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
+      const urgency = daysLeft <= 3 ? '🔴' : daysLeft <= 5 ? '🟠' : '🟡';
+
+      message += `${urgency} ${index + 1}. ${client.client_name}
+   📧 ${client.email}
+   📅 만료일: ${client.service_end_date}
+   ⏰ 남은 일수: ${daysLeft}일
+   🔔 텔레그램: ${client.telegram_enabled ? 'ON' : 'OFF'}
+
+`;
+    });
+
+    message += `━━━━━━━━━━━━━━━━━━━━━━
+📌 결제 안내 발송 및 갱신 처리 필요
+🔗 관리자 페이지에서 결제 관리 가능
+
+🤖 BAS Meta Ads Analytics
+📅 ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} (KST)
+`;
+
+    // 관리자에게 텔레그램 발송
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const response = await fetch(
+      `https://api.telegram.org/bot${botToken}/sendMessage`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: ADMIN_CHAT_ID,
+          text: message.trim(),
+          parse_mode: "Markdown"
+        })
+      }
+    );
+
+    if (response.ok) {
+      console.log("✅ Expiration alert sent to admin");
+    } else {
+      const errorText = await response.text();
+      console.error("❌ Failed to send expiration alert:", errorText);
+    }
+
+  } catch (error) {
+    console.error("❌ Error in checkExpiringServices:", error.message);
+  }
+}
+
+// 매일 오전 9시에 만료 임박 체크 (월요일은 주간 리포트와 함께)
+cron.schedule('0 9 * * *', async () => {
+  console.log("\n⏰ Daily expiration check triggered");
+  await checkExpiringServices();
+}, {
+  timezone: "Asia/Seoul"
+});
+
 console.log("✅ Cron job scheduled:");
-console.log("   - Every Monday at 09:00 (KST)");
+console.log("   - Every Monday at 09:00 (KST) - Weekly reports");
+console.log("   - Every day at 09:00 (KST) - Expiration alerts");
 console.log("   - Reports last week's data (Monday ~ Sunday)");
 console.log("");
 

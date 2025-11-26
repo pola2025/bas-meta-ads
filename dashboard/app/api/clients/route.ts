@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
       target_spend,
       target_cpl,
       service_start_date,
+      service_end_date,
       telegram_enabled = true,
       unlimited_service = false
     } = body;
@@ -121,8 +122,15 @@ export async function POST(request: NextRequest) {
 
     // 서비스 기간 계산
     const startDate = service_start_date || new Date().toISOString().split('T')[0];
-    // 무제한 서비스인 경우 종료일을 null로 설정
-    const endDate = unlimited_service ? null : calculateEndDate(startDate);
+    // 무제한 서비스인 경우 종료일을 null로, 직접 지정한 경우 해당 값 사용, 아니면 3개월 후 계산
+    let endDate: string | null = null;
+    if (unlimited_service) {
+      endDate = null;
+    } else if (service_end_date) {
+      endDate = service_end_date;
+    } else {
+      endDate = calculateEndDate(startDate);
+    }
 
     // 클라이언트 생성
     const { data: newClient, error: clientError } = await supabaseAdmin
@@ -230,6 +238,7 @@ export async function PUT(request: NextRequest) {
       target_spend,
       target_cpl,
       service_start_date,
+      service_end_date,
       telegram_enabled,
       unlimited_service
     } = body;
@@ -253,17 +262,17 @@ export async function PUT(request: NextRequest) {
       updateData.service_start_date = service_start_date;
     }
 
-    // 무제한 서비스 설정 시 종료일을 null로, 아니면 시작일 기준 재계산
-    if (unlimited_service !== undefined) {
-      if (unlimited_service) {
-        updateData.service_end_date = null;
+    // 서비스 종료일 처리: 무제한 > 직접 지정 > 자동 계산
+    if (unlimited_service === true) {
+      updateData.service_end_date = null;
+    } else if (service_end_date !== undefined) {
+      // 직접 지정한 종료일 사용 (빈 문자열이면 null로 처리하지 않고 자동 계산)
+      if (service_end_date) {
+        updateData.service_end_date = service_end_date;
       } else if (service_start_date) {
+        // 종료일이 빈 문자열이고 시작일이 있으면 자동 계산
         updateData.service_end_date = calculateEndDate(service_start_date);
       }
-    } else if (service_start_date !== undefined) {
-      // unlimited_service가 명시되지 않은 경우에도 시작일 변경 시 종료일 재계산
-      // 기존 클라이언트의 종료일이 null이 아닌 경우에만
-      updateData.service_end_date = calculateEndDate(service_start_date);
     }
 
     const { data: updatedClient, error: updateError } = await supabaseAdmin

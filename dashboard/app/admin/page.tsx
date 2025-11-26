@@ -18,7 +18,10 @@ import {
   MessageCircle,
   Calendar,
   Bell,
-  BellOff
+  BellOff,
+  DollarSign,
+  History,
+  CalendarPlus
 } from 'lucide-react';
 
 interface ClientTargets {
@@ -56,8 +59,21 @@ interface ClientFormData {
   target_spend: string;
   target_cpl: string;
   service_start_date: string;
+  service_end_date: string;
   telegram_enabled: boolean;
   unlimited_service: boolean;
+}
+
+interface Payment {
+  id: string;
+  client_id: string;
+  payment_date: string;
+  amount: number | null;
+  payment_type: string;
+  payment_method: string | null;
+  memo: string | null;
+  service_months: number;
+  created_at: string;
 }
 
 const initialFormData: ClientFormData = {
@@ -71,6 +87,7 @@ const initialFormData: ClientFormData = {
   target_spend: '',
   target_cpl: '',
   service_start_date: new Date().toISOString().split('T')[0],
+  service_end_date: '',
   telegram_enabled: true,
   unlimited_service: false
 };
@@ -92,6 +109,20 @@ export default function AdminPage() {
 
   // 복사 상태
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // 결제 모달 상태
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentClient, setPaymentClient] = useState<Client | null>(null);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({
+    payment_date: new Date().toISOString().split('T')[0],
+    amount: '',
+    payment_type: 'monthly',
+    memo: '',
+    service_months: '3',
+    use_today: true // true면 오늘 날짜, false면 직접 지정
+  });
 
   // 관리자 키 검증
   const isValidAdmin = adminKey === process.env.NEXT_PUBLIC_ADMIN_KEY;
@@ -144,6 +175,7 @@ export default function AdminPage() {
             target_spend: formData.target_spend ? parseFloat(formData.target_spend) : null,
             target_cpl: formData.target_cpl ? parseFloat(formData.target_cpl) : null,
             service_start_date: formData.service_start_date || null,
+            service_end_date: formData.service_end_date || null,
             telegram_enabled: formData.telegram_enabled,
             unlimited_service: formData.unlimited_service
           }
@@ -158,6 +190,7 @@ export default function AdminPage() {
             target_spend: formData.target_spend ? parseFloat(formData.target_spend) : null,
             target_cpl: formData.target_cpl ? parseFloat(formData.target_cpl) : null,
             service_start_date: formData.service_start_date || null,
+            service_end_date: formData.service_end_date || null,
             telegram_enabled: formData.telegram_enabled,
             unlimited_service: formData.unlimited_service
           };
@@ -226,10 +259,119 @@ export default function AdminPage() {
       target_spend: client.targets?.target_spend?.toString() || '',
       target_cpl: client.targets?.target_cpl?.toString() || '',
       service_start_date: client.service_start_date || new Date().toISOString().split('T')[0],
+      service_end_date: client.service_end_date || '',
       telegram_enabled: client.telegram_enabled ?? true,
       unlimited_service: client.service_end_date === null
     });
     setShowModal(true);
+  };
+
+  // 결제 모달 열기
+  const openPaymentModal = async (client: Client) => {
+    setPaymentClient(client);
+    setPaymentForm({
+      payment_date: new Date().toISOString().split('T')[0],
+      amount: '',
+      payment_type: 'monthly',
+      memo: '',
+      service_months: '3',
+      use_today: true
+    });
+    setShowPaymentModal(true);
+
+    // 결제 히스토리 조회
+    setPaymentLoading(true);
+    try {
+      const response = await fetch(`/api/payments?client_id=${client.id}`, {
+        headers: { 'x-admin-key': adminKey || '' }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setPayments(data.payments || []);
+      }
+    } catch (err) {
+      console.error('Error fetching payments:', err);
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  // 결제 등록
+  const handlePaymentSubmit = async () => {
+    if (!paymentClient) return;
+
+    try {
+      const response = await fetch('/api/payments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey || ''
+        },
+        body: JSON.stringify({
+          client_id: paymentClient.id,
+          payment_date: paymentForm.use_today ? null : paymentForm.payment_date,
+          amount: paymentForm.amount ? parseFloat(paymentForm.amount) : null,
+          payment_type: paymentForm.payment_type,
+          memo: paymentForm.memo || null,
+          service_months: parseInt(paymentForm.service_months)
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to record payment');
+      }
+
+      const result = await response.json();
+      alert(result.message || '결제가 등록되었습니다.');
+
+      // 히스토리 새로고침
+      const historyRes = await fetch(`/api/payments?client_id=${paymentClient.id}`, {
+        headers: { 'x-admin-key': adminKey || '' }
+      });
+      if (historyRes.ok) {
+        const data = await historyRes.json();
+        setPayments(data.payments || []);
+      }
+
+      // 클라이언트 목록 새로고침
+      fetchClients();
+
+      // 폼 리셋
+      setPaymentForm({
+        payment_date: new Date().toISOString().split('T')[0],
+        amount: '',
+        payment_type: 'monthly',
+        memo: '',
+        service_months: '3',
+        use_today: true
+      });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error recording payment');
+    }
+  };
+
+  // 결제 삭제
+  const handleDeletePayment = async (paymentId: string) => {
+    if (!confirm('이 결제 기록을 삭제하시겠습니까?')) return;
+
+    try {
+      const response = await fetch(`/api/payments?id=${paymentId}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-key': adminKey || '' }
+      });
+
+      if (response.ok && paymentClient) {
+        const historyRes = await fetch(`/api/payments?client_id=${paymentClient.id}`, {
+          headers: { 'x-admin-key': adminKey || '' }
+        });
+        if (historyRes.ok) {
+          const data = await historyRes.json();
+          setPayments(data.payments || []);
+        }
+      }
+    } catch (err) {
+      alert('삭제 실패');
+    }
   };
 
   // 새 클라이언트 모달 열기
@@ -400,6 +542,13 @@ export default function AdminPage() {
 
                   {/* 액션 버튼 */}
                   <div className="flex items-center gap-2 ml-4">
+                    <button
+                      onClick={() => openPaymentModal(client)}
+                      className="p-2 text-neutral-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                      title="결제 관리"
+                    >
+                      <DollarSign className="w-5 h-5" />
+                    </button>
                     <button
                       onClick={() => openEditModal(client)}
                       className="p-2 text-neutral-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -575,23 +724,38 @@ export default function AdminPage() {
                 <h3 className="text-sm font-semibold text-neutral-900 mb-3">서비스 기간</h3>
 
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-1">
-                      서비스 시작일
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.service_start_date}
-                      onChange={(e) => setFormData({ ...formData, service_start_date: e.target.value })}
-                      className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-neutral-700 mb-1">
+                        서비스 시작일
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.service_start_date}
+                        onChange={(e) => setFormData({ ...formData, service_start_date: e.target.value })}
+                        className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-neutral-700 mb-1">
+                        서비스 종료일
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.service_end_date}
+                        onChange={(e) => setFormData({ ...formData, service_end_date: e.target.value, unlimited_service: false })}
+                        disabled={formData.unlimited_service}
+                        className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-neutral-100 disabled:text-neutral-400"
+                        placeholder="무제한"
+                      />
+                    </div>
                   </div>
 
                   <label className="flex items-center gap-3 p-3 bg-neutral-50 rounded-lg cursor-pointer hover:bg-neutral-100 transition-colors">
                     <input
                       type="checkbox"
                       checked={formData.unlimited_service}
-                      onChange={(e) => setFormData({ ...formData, unlimited_service: e.target.checked })}
+                      onChange={(e) => setFormData({ ...formData, unlimited_service: e.target.checked, service_end_date: '' })}
                       className="w-5 h-5 rounded border-neutral-300 text-blue-600 focus:ring-blue-500"
                     />
                     <div>
@@ -601,12 +765,6 @@ export default function AdminPage() {
                       </p>
                     </div>
                   </label>
-
-                  {!formData.unlimited_service && (
-                    <p className="text-xs text-neutral-500">
-                      종료일은 시작일 기준 3개월 후 자동 계산됩니다
-                    </p>
-                  )}
                 </div>
               </div>
 
@@ -691,6 +849,193 @@ export default function AdminPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 결제 관리 모달 */}
+      {showPaymentModal && paymentClient && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-neutral-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold">결제 관리</h2>
+                <p className="text-sm text-neutral-500">{paymentClient.client_name}</p>
+              </div>
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="p-2 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* 결제 등록 폼 */}
+              <div className="bg-green-50 rounded-xl p-4 space-y-4">
+                <h3 className="font-semibold text-green-800 flex items-center gap-2">
+                  <DollarSign className="w-5 h-5" />
+                  결제 등록
+                </h3>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* 결제일 선택 */}
+                  <div className="col-span-2">
+                    <div className="flex gap-4 mb-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={paymentForm.use_today}
+                          onChange={() => setPaymentForm({ ...paymentForm, use_today: true })}
+                          className="w-4 h-4 text-green-600"
+                        />
+                        <span className="text-sm font-medium">결제완료 (오늘 날짜)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={!paymentForm.use_today}
+                          onChange={() => setPaymentForm({ ...paymentForm, use_today: false })}
+                          className="w-4 h-4 text-green-600"
+                        />
+                        <span className="text-sm font-medium">결제일 지정</span>
+                      </label>
+                    </div>
+                    {!paymentForm.use_today && (
+                      <input
+                        type="date"
+                        value={paymentForm.payment_date}
+                        onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })}
+                        className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">
+                      결제 금액 (원)
+                    </label>
+                    <input
+                      type="number"
+                      value={paymentForm.amount}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+                      className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      placeholder="330000"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">
+                      서비스 기간 (개월)
+                    </label>
+                    <select
+                      value={paymentForm.service_months}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, service_months: e.target.value })}
+                      className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    >
+                      <option value="1">1개월</option>
+                      <option value="3">3개월</option>
+                      <option value="6">6개월</option>
+                      <option value="12">12개월</option>
+                    </select>
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">
+                      메모
+                    </label>
+                    <input
+                      type="text"
+                      value={paymentForm.memo}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, memo: e.target.value })}
+                      className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      placeholder="카드결제, 계좌이체 등"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={handlePaymentSubmit}
+                  className="w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <CalendarPlus className="w-5 h-5" />
+                  결제 등록 및 서비스 기간 갱신
+                </button>
+              </div>
+
+              {/* 결제 히스토리 */}
+              <div>
+                <h3 className="font-semibold text-neutral-800 flex items-center gap-2 mb-3">
+                  <History className="w-5 h-5" />
+                  결제 히스토리
+                </h3>
+
+                {paymentLoading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                  </div>
+                ) : payments.length === 0 ? (
+                  <div className="text-center py-8 text-neutral-500">
+                    결제 기록이 없습니다
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {payments.map((payment) => (
+                      <div
+                        key={payment.id}
+                        className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            <span className="font-medium">{payment.payment_date}</span>
+                            {payment.amount && (
+                              <span className="text-green-600 font-semibold">
+                                ₩{payment.amount.toLocaleString()}
+                              </span>
+                            )}
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                              +{payment.service_months}개월
+                            </span>
+                          </div>
+                          {payment.memo && (
+                            <p className="text-sm text-neutral-500 mt-1">{payment.memo}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleDeletePayment(payment.id)}
+                          className="p-1.5 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded"
+                          title="삭제"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 현재 서비스 기간 */}
+              <div className="bg-neutral-100 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-neutral-600 mb-2">현재 서비스 기간</h4>
+                <p className="text-lg font-semibold">
+                  {paymentClient.service_start_date || '-'} ~ {' '}
+                  {paymentClient.service_end_date === null ? (
+                    <span className="text-blue-600">무제한</span>
+                  ) : (
+                    paymentClient.service_end_date || '-'
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-neutral-200">
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="w-full py-2 border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 transition-colors"
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}
