@@ -818,3 +818,30 @@ export async function getAllAdsWithStatus(clientId?: string): Promise<AdWithStat
     return [];
   }
 }
+
+// 마지막 데이터 수집일 조회
+export async function getLastDataCollectionDate(clientId?: string): Promise<string | null> {
+  try {
+    let query = supabase
+      .from('raw_data')
+      .select('date')
+      .order('date', { ascending: false })
+      .limit(1);
+
+    if (clientId) {
+      query = query.eq('client_id', clientId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching last collection date:', error);
+      return null;
+    }
+
+    return data && data.length > 0 ? data[0].date : null;
+  } catch (error) {
+    console.error('Unexpected error in getLastDataCollectionDate:', error);
+    return null;
+  }
+}
