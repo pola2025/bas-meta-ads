@@ -106,7 +106,7 @@ async function fetchMetaAdsData(
   let nextUrl: string | null = `${baseUrl}?${params}`;
 
   while (nextUrl) {
-    const response = await fetch(nextUrl);
+    const response: Response = await fetch(nextUrl);
 
     if (!response.ok) {
       const errorData = await response.json();
@@ -119,7 +119,8 @@ async function fetchMetaAdsData(
       allData = allData.concat(resJson.data);
     }
 
-    nextUrl = resJson.paging?.next || null;
+    const nextPage = resJson.paging?.next;
+    nextUrl = nextPage || null;
 
     // Rate limit 방지
     if (nextUrl) {
