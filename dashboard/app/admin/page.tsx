@@ -477,15 +477,24 @@ export default function AdminPage() {
                     <label className="block text-sm font-medium text-neutral-700 mb-1">
                       Meta 광고계정 ID
                     </label>
-                    <input
-                      type="text"
-                      value={formData.meta_ad_account_id}
-                      onChange={(e) =>
-                        setFormData({ ...formData, meta_ad_account_id: e.target.value })
-                      }
-                      className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="act_XXXXXXXXX"
-                    />
+                    <div className="flex">
+                      <span className="inline-flex items-center px-3 text-sm text-neutral-600 bg-neutral-100 border border-r-0 border-neutral-300 rounded-l-lg">
+                        act_
+                      </span>
+                      <input
+                        type="text"
+                        value={formData.meta_ad_account_id.replace(/^act_/, '')}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '');
+                          setFormData({ ...formData, meta_ad_account_id: value ? `act_${value}` : '' });
+                        }}
+                        className="flex-1 px-4 py-2 border border-neutral-300 rounded-r-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="123456789"
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-neutral-500">
+                      비즈니스 설정 → 광고 계정에서 확인 (숫자만 입력)
+                    </p>
                   </div>
 
                   {!editingClient && (
