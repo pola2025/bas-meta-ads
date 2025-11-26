@@ -592,6 +592,11 @@ export async function getAdDailyData(
       .select('date, leads, spend, clicks, impressions')
       .eq('ad_name', adName);
 
+    // ⚠️ 클라이언트별 데이터 분리 - 필수!
+    if (filters?.clientId) {
+      query = query.eq('client_id', filters.clientId);
+    }
+
     if (filters?.startDate) {
       query = query.gte('date', filters.startDate);
     }
@@ -730,14 +735,21 @@ export interface AdWithStatus extends TopAd {
   firstActiveDate: string;
 }
 
-export async function getAllAdsWithStatus(): Promise<AdWithStatus[]> {
+export async function getAllAdsWithStatus(clientId?: string): Promise<AdWithStatus[]> {
   try {
     // 모든 광고 데이터 조회 (날짜 포함)
-    const { data, error } = await supabase
+    let query = supabase
       .from('ads_insights_daily')
       .select('ad_name, campaign_name, platform, leads, spend, clicks, impressions, date')
       .order('date', { ascending: false })
       .range(0, 5000);
+
+    // ⚠️ 클라이언트별 데이터 분리 - 필수!
+    if (clientId) {
+      query = query.eq('client_id', clientId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('Error fetching all ads:', error);

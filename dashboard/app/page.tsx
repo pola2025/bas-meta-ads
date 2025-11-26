@@ -105,13 +105,16 @@ export default function Home() {
   }, [searchParams]);
 
   // URL에서 필터 읽기 (compare 파라미터 포함)
+  // 관리자 모드에서 선택된 클라이언트 또는 일반 클라이언트 ID 사용
+  const effectiveClientId = accessMode === 'admin' ? selectedClientId : clientId;
+
   const compareMode = searchParams.get('compare') as 'none' | 'weekly' | 'monthly' || 'none';
   const filters: Filters = {
     startDate: searchParams.get('start'),
     endDate: searchParams.get('end'),
     platforms: searchParams.get('platforms')?.split(',').filter(Boolean),
     campaigns: searchParams.get('campaigns')?.split(',').filter(Boolean),
-    clientId: clientId || undefined
+    clientId: effectiveClientId || undefined
   };
 
   // 기본 날짜 범위
@@ -156,16 +159,14 @@ export default function Home() {
           endDate: filters.endDate || format(today, 'yyyy-MM-dd')
         };
 
-        // 멀티클라이언트 지원: client_id 필터 적용
-        const effectiveClientId = clientId || undefined;
         const [kpiData, trendData, allTrendData, platformData, adsData, allAdsData, targetsData, sparkData] = await Promise.all([
           getKPISummary(filters),
           getDailyTrend(trendFilters),
-          getAllDailyTrend(effectiveClientId), // 전체 기간 데이터 (기간별 데이터 탭용)
+          getAllDailyTrend(effectiveClientId || undefined), // 전체 기간 데이터 (기간별 데이터 탭용)
           getPlatformPerformance(filters),
           getTopAds(filters, 10),
-          getAllAdsWithStatus(), // 전체 광고 (활성/비활성 포함)
-          getClientTargets(effectiveClientId),
+          getAllAdsWithStatus(effectiveClientId || undefined), // ⚠️ 클라이언트별 광고만 조회
+          getClientTargets(effectiveClientId || undefined),
           getKPISparklineData(filters)
         ]);
 
@@ -201,7 +202,8 @@ export default function Home() {
   }, [
     accessMode,
     accessLoading,
-    clientId,
+    effectiveClientId,
+    selectedClientId,
     filters.startDate,
     filters.endDate,
     filters.platforms?.join(','),
