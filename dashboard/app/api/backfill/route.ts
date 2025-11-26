@@ -178,73 +178,6 @@ async function saveRawData(clientId: string, insights: any[]): Promise<number> {
   return savedCount;
 }
 
-// daily_aggregates 동기화
-async function syncDailyAggregates(clientId: string, startDate: string, endDate: string): Promise<void> {
-  // RPC 호출로 daily_aggregates 생성
-  const { error } = await supabase.rpc('sync_daily_aggregates', {
-    p_client_id: clientId,
-    p_start_date: startDate,
-    p_end_date: endDate
-  });
-
-  if (error) {
-    console.error('Failed to sync daily aggregates:', error.message);
-    // RPC가 없으면 직접 집계 (fallback)
-    await manualSyncDailyAggregates(clientId, startDate, endDate);
-  }
-}
-
-// 수동 daily_aggregates 동기화 (RPC 없을 때)
-async function manualSyncDailyAggregates(clientId: string, startDate: string, endDate: string): Promise<void> {
-  // raw_data에서 날짜별 집계
-  const { data: rawData, error } = await supabase
-    .from('raw_data')
-    .select('date, ad_name, campaign_name, impressions, clicks, leads, spend')
-    .eq('client_id', clientId)
-    .gte('date', startDate)
-    .lte('date', endDate);
-
-  if (error || !rawData) return;
-
-  // 날짜+광고별 집계
-  const aggregated: Record<string, any> = {};
-
-  rawData.forEach((row: any) => {
-    const key = `${row.date}_${row.ad_name}`;
-    if (!aggregated[key]) {
-      aggregated[key] = {
-        client_id: clientId,
-        date: row.date,
-        ad_name: row.ad_name,
-        campaign_name: row.campaign_name,
-        impressions: 0,
-        clicks: 0,
-        leads: 0,
-        spend: 0
-      };
-    }
-    aggregated[key].impressions += row.impressions || 0;
-    aggregated[key].clicks += row.clicks || 0;
-    aggregated[key].leads += row.leads || 0;
-    aggregated[key].spend += row.spend || 0;
-  });
-
-  const records = Object.values(aggregated).map((item: any) => ({
-    ...item,
-    ctr: item.impressions > 0 ? (item.clicks / item.impressions) * 100 : 0,
-    cvr: item.clicks > 0 ? (item.leads / item.clicks) * 100 : 0,
-    cpl: item.leads > 0 ? item.spend / item.leads : 0
-  }));
-
-  // ads_insights_daily에 upsert
-  for (let i = 0; i < records.length; i += 50) {
-    const batch = records.slice(i, i + 50);
-    await supabase
-      .from('ads_insights_daily')
-      .upsert(batch, { onConflict: 'client_id,date,ad_name' });
-  }
-}
-
 // POST: 백필 작업 실행
 export async function POST(request: NextRequest) {
   if (!isValidAdmin(request)) {
@@ -334,15 +267,11 @@ export async function POST(request: NextRequest) {
 
       console.log(`📊 Fetched ${insights.length} records from Meta API`);
 
-      // 2. raw_data에 저장
+      // 2. raw_data에 저장 (VIEW가 자동 집계)
       const savedCount = await saveRawData(clientId, insights);
       console.log(`💾 Saved ${savedCount} records to raw_data`);
 
-      // 3. daily_aggregates 동기화
-      await syncDailyAggregates(clientId, startDate, endDate);
-      console.log(`📈 Daily aggregates synced`);
-
-      // 4. 텔레그램 알림
+      // 3. 텔레그램 알림
       await sendBackfillNotification(
         client.client_name,
         startDate,
