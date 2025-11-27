@@ -1020,7 +1020,7 @@ export default function AdminPage() {
                             </div>
                             <div className="flex items-center gap-2">
                               <Target className="w-4 h-4" />
-                              목표: {client.targets?.target_leads || '-'}리드 / {client.targets?.target_spend?.toLocaleString() || '-'}원
+                              목표: {client.targets?.target_leads || '-'}리드 / ${client.targets?.target_spend?.toLocaleString() || '-'}
                             </div>
                             <div className="flex items-center gap-2">
                               <Calendar className="w-4 h-4" />
@@ -1339,24 +1339,24 @@ export default function AdminPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-1">월 목표 예산 (원)</label>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">월 목표 예산 ($)</label>
                     <input
                       type="number"
                       value={formData.target_spend}
                       onChange={(e) => setFormData({ ...formData, target_spend: e.target.value })}
                       className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="1000000"
+                      placeholder="1000"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-neutral-700 mb-1">목표 CPL (원)</label>
+                    <label className="block text-sm font-medium text-neutral-700 mb-1">목표 CPL ($)</label>
                     <input
                       type="number"
                       value={formData.target_cpl}
                       onChange={(e) => setFormData({ ...formData, target_cpl: e.target.value })}
                       className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="10000"
+                      placeholder="10"
                     />
                   </div>
                 </div>
