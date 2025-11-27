@@ -28,12 +28,27 @@ import {
   Activity,
   AlertTriangle,
   TrendingUp,
+  TrendingDown,
   RefreshCw,
   ChevronDown,
   ChevronUp,
   Timer,
   Pause,
+  BarChart3,
 } from 'lucide-react';
+import {
+  ComposedChart,
+  Bar,
+  Line,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+  ReferenceArea,
+} from 'recharts';
 
 interface ClientTargets {
   target_leads: number | null;
@@ -107,6 +122,39 @@ interface Payment {
   created_at: string;
 }
 
+interface DailyFlowData {
+  date: string;
+  day: number;
+  impressions: number;
+  clicks: number;
+  leads: number;
+  spend: number;
+  cpl: number;
+  ctr: number;
+  avgWatchTime: number;
+}
+
+interface MonthlyFlowResponse {
+  success: boolean;
+  year: number;
+  month: number;
+  dailyData: DailyFlowData[];
+  monthlyTotals: {
+    impressions: number;
+    clicks: number;
+    leads: number;
+    spend: number;
+    avgCpl: number;
+    avgWatchTime: number;
+  };
+  analysis: {
+    avgCpl: number;
+    threshold: number;
+    inefficientDays: number[];
+    inefficientCount: number;
+  };
+}
+
 interface BackfillLog {
   time: string;
   type: 'info' | 'success' | 'warning' | 'error';
@@ -157,6 +205,14 @@ export default function AdminPage() {
 
   // 복사 상태
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // 월간 흐름 차트 상태
+  const [monthlyFlowData, setMonthlyFlowData] = useState<MonthlyFlowResponse | null>(null);
+  const [flowMonth, setFlowMonth] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() + 1 };
+  });
+  const [flowLoading, setFlowLoading] = useState(false);
 
   // 결제 모달 상태
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -238,6 +294,29 @@ export default function AdminPage() {
   useEffect(() => {
     fetchData();
   }, [isValidAdmin]);
+
+  // 월간 흐름 데이터 로드
+  const fetchMonthlyFlow = async () => {
+    if (!isValidAdmin) return;
+    setFlowLoading(true);
+    try {
+      const res = await fetch(`/api/admin/monthly-flow?year=${flowMonth.year}&month=${flowMonth.month}`, {
+        headers: { 'x-admin-key': adminKey || '' },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMonthlyFlowData(data);
+      }
+    } catch (err) {
+      console.error('Monthly flow fetch error:', err);
+    } finally {
+      setFlowLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMonthlyFlow();
+  }, [isValidAdmin, flowMonth]);
 
   // 로그 자동 스크롤
   useEffect(() => {
@@ -980,6 +1059,221 @@ export default function AdminPage() {
                 )}
               </div>
             )}
+
+            {/* 월간 광고 효율 흐름 차트 */}
+            <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-semibold text-neutral-800 flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-blue-600" />
+                  월간 광고 효율 흐름
+                </h2>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={`${flowMonth.year}-${flowMonth.month}`}
+                    onChange={(e) => {
+                      const [y, m] = e.target.value.split('-').map(Number);
+                      setFlowMonth({ year: y, month: m });
+                    }}
+                    className="px-3 py-1.5 border border-neutral-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  >
+                    {Array.from({ length: 12 }, (_, i) => {
+                      const date = new Date();
+                      date.setMonth(date.getMonth() - i);
+                      const y = date.getFullYear();
+                      const m = date.getMonth() + 1;
+                      return (
+                        <option key={`${y}-${m}`} value={`${y}-${m}`}>
+                          {y}년 {m}월
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <button
+                    onClick={fetchMonthlyFlow}
+                    disabled={flowLoading}
+                    className="p-1.5 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${flowLoading ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* 월 합계 스코어카드 */}
+              {monthlyFlowData && (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+                  <div className="bg-blue-50 rounded-lg p-3 text-center">
+                    <div className="text-xs text-blue-600">도달</div>
+                    <div className="text-lg font-bold text-blue-700">
+                      {monthlyFlowData.monthlyTotals.impressions.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-3 text-center">
+                    <div className="text-xs text-green-600">리드</div>
+                    <div className="text-lg font-bold text-green-700">{monthlyFlowData.monthlyTotals.leads}</div>
+                  </div>
+                  <div className="bg-amber-50 rounded-lg p-3 text-center">
+                    <div className="text-xs text-amber-600">지출</div>
+                    <div className="text-lg font-bold text-amber-700">${monthlyFlowData.monthlyTotals.spend.toLocaleString()}</div>
+                  </div>
+                  <div className="bg-purple-50 rounded-lg p-3 text-center">
+                    <div className="text-xs text-purple-600">평균 CPL</div>
+                    <div className="text-lg font-bold text-purple-700">${monthlyFlowData.monthlyTotals.avgCpl}</div>
+                  </div>
+                  <div className="bg-teal-50 rounded-lg p-3 text-center">
+                    <div className="text-xs text-teal-600">평균 시청</div>
+                    <div className="text-lg font-bold text-teal-700">
+                      {monthlyFlowData.monthlyTotals.avgWatchTime > 0
+                        ? monthlyFlowData.monthlyTotals.avgWatchTime < 60
+                          ? `${monthlyFlowData.monthlyTotals.avgWatchTime}s`
+                          : `${Math.floor(monthlyFlowData.monthlyTotals.avgWatchTime / 60)}:${String(Math.round(monthlyFlowData.monthlyTotals.avgWatchTime % 60)).padStart(2, '0')}`
+                        : '-'}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 효율 저하 경고 */}
+              {monthlyFlowData && monthlyFlowData.analysis.inefficientCount > 0 && (
+                <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <div className="font-medium text-red-800">효율 저하 구간 감지</div>
+                    <div className="text-sm text-red-600">
+                      {flowMonth.month}월 {monthlyFlowData.analysis.inefficientDays.join(', ')}일에 CPL이 평균($
+                      {monthlyFlowData.analysis.avgCpl}) 대비 30% 이상 높았습니다.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 차트 */}
+              {flowLoading ? (
+                <div className="h-80 flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                </div>
+              ) : monthlyFlowData && monthlyFlowData.dailyData.length > 0 ? (
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart
+                      data={monthlyFlowData.dailyData}
+                      margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="day"
+                        tick={{ fontSize: 11, fill: '#6b7280' }}
+                        tickLine={{ stroke: '#d1d5db' }}
+                      />
+                      <YAxis
+                        yAxisId="left"
+                        orientation="left"
+                        tick={{ fontSize: 11, fill: '#6b7280' }}
+                        tickLine={{ stroke: '#d1d5db' }}
+                        label={{ value: '지출 ($)', angle: -90, position: 'insideLeft', fontSize: 11, fill: '#6b7280' }}
+                      />
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        tick={{ fontSize: 11, fill: '#6b7280' }}
+                        tickLine={{ stroke: '#d1d5db' }}
+                        label={{ value: 'CPL ($)', angle: 90, position: 'insideRight', fontSize: 11, fill: '#6b7280' }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'white',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                        }}
+                        formatter={(value: number, name: string) => {
+                          if (name === 'spend') return [`$${value.toFixed(2)}`, '지출'];
+                          if (name === 'cpl') return [`$${value.toFixed(2)}`, 'CPL'];
+                          if (name === 'leads') return [value, '리드'];
+                          return [value, name];
+                        }}
+                        labelFormatter={(day) => `${flowMonth.month}월 ${day}일`}
+                      />
+                      {/* 효율 저하 구간 하이라이트 */}
+                      {monthlyFlowData.analysis.inefficientDays.map((day) => (
+                        <ReferenceArea
+                          key={day}
+                          x1={day - 0.5}
+                          x2={day + 0.5}
+                          yAxisId="left"
+                          fill="#fecaca"
+                          fillOpacity={0.4}
+                        />
+                      ))}
+                      {/* 평균 CPL 참조선 */}
+                      <ReferenceLine
+                        yAxisId="right"
+                        y={monthlyFlowData.analysis.avgCpl}
+                        stroke="#8b5cf6"
+                        strokeDasharray="5 5"
+                        label={{
+                          value: `평균 CPL $${monthlyFlowData.analysis.avgCpl}`,
+                          position: 'right',
+                          fontSize: 10,
+                          fill: '#8b5cf6',
+                        }}
+                      />
+                      {/* 지출 막대 */}
+                      <Bar yAxisId="left" dataKey="spend" fill="#3b82f6" radius={[2, 2, 0, 0]} name="spend" />
+                      {/* 리드 영역 */}
+                      <Area
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="leads"
+                        fill="#10b981"
+                        fillOpacity={0.2}
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        name="leads"
+                      />
+                      {/* CPL 라인 */}
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="cpl"
+                        stroke="#ef4444"
+                        strokeWidth={2}
+                        dot={{ r: 3, fill: '#ef4444' }}
+                        activeDot={{ r: 5 }}
+                        name="cpl"
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-80 flex items-center justify-center text-neutral-400">
+                  데이터가 없습니다
+                </div>
+              )}
+
+              {/* 범례 */}
+              <div className="mt-4 flex items-center justify-center gap-6 text-xs text-neutral-600">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 bg-blue-500 rounded" />
+                  <span>광고 지출</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 bg-green-500 rounded" />
+                  <span>리드</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 bg-red-500 rounded-full" />
+                  <span>CPL</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-4 h-0.5 bg-purple-500" style={{ borderTop: '2px dashed #8b5cf6' }} />
+                  <span>평균 CPL</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 bg-red-200 rounded" />
+                  <span>효율 저하 구간</span>
+                </div>
+              </div>
+            </div>
 
             {/* 클라이언트 목록 */}
             {clients.length === 0 ? (
