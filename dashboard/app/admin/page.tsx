@@ -1307,15 +1307,15 @@ export default function AdminPage() {
                         dot={(props: any) => {
                           const { cx, cy, payload } = props;
                           if (!payload?.day || !cx || !cy) return <circle cx={0} cy={0} r={0} />;
-                          const isInefficient = monthlyFlowData.analysis.inefficientDays.includes(payload.day);
+                          const isHighCpl = payload.cpl >= 20;
                           return (
                             <circle
                               cx={cx}
                               cy={cy}
-                              r={isInefficient ? 5 : 3}
-                              fill={isInefficient ? '#dc2626' : '#ef4444'}
-                              stroke={isInefficient ? '#fef2f2' : 'none'}
-                              strokeWidth={isInefficient ? 2 : 0}
+                              r={isHighCpl ? 5 : 3}
+                              fill={isHighCpl ? '#dc2626' : '#ef4444'}
+                              stroke={isHighCpl ? '#fef2f2' : 'none'}
+                              strokeWidth={isHighCpl ? 2 : 0}
                             />
                           );
                         }}
@@ -1324,8 +1324,8 @@ export default function AdminPage() {
                         label={(props: any) => {
                           const { x, y, payload } = props;
                           if (!payload?.day) return <text />;
-                          const isInefficient = monthlyFlowData.analysis.inefficientDays.includes(payload.day);
-                          if (!isInefficient) return <text />;
+                          const isHighCpl = payload.cpl >= 20;
+                          if (!isHighCpl) return <text />;
                           return (
                             <text x={x} y={y - 12} textAnchor="middle" fontSize={14}>
                               🚨
