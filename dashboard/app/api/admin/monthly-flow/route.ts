@@ -23,18 +23,38 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString());
     const month = parseInt(searchParams.get('month') || (new Date().getMonth() + 1).toString());
+    const filter = searchParams.get('filter') || 'all'; // 'all', 'general', 'bizactor'
 
     // 해당 월의 시작일과 종료일
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const lastDay = new Date(year, month, 0).getDate();
     const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
 
-    // raw_data에서 일별 집계
-    const { data: rawData, error } = await supabaseAdmin
+    // 비즈액터스쿨 클라이언트 ID 조회
+    const { data: bizactorClients } = await supabaseAdmin
+      .from('clients')
+      .select('id')
+      .ilike('client_name', '%비즈액터스쿨%');
+
+    const bizactorClientIds = bizactorClients?.map(c => c.id) || [];
+
+    // raw_data에서 일별 집계 (필터 적용)
+    let query = supabaseAdmin
       .from('raw_data')
-      .select('date, impressions, clicks, leads, spend, avg_watch_time')
+      .select('date, impressions, clicks, leads, spend, avg_watch_time, client_id')
       .gte('date', startDate)
       .lte('date', endDate);
+
+    // 필터 적용
+    if (filter === 'general' && bizactorClientIds.length > 0) {
+      // 일반고객: 비즈액터스쿨 제외
+      query = query.not('client_id', 'in', `(${bizactorClientIds.join(',')})`);
+    } else if (filter === 'bizactor' && bizactorClientIds.length > 0) {
+      // 비즈액터스쿨만
+      query = query.in('client_id', bizactorClientIds);
+    }
+
+    const { data: rawData, error } = await query;
 
     if (error) {
       throw error;
@@ -134,6 +154,7 @@ export async function GET(request: NextRequest) {
       success: true,
       year,
       month,
+      filter,
       startDate,
       endDate,
       dailyData,

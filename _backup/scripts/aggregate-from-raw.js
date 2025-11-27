@@ -3,7 +3,9 @@
  * raw_data → daily_aggregates 집계 스크립트
  *
  * 사용법:
- *   node aggregate-from-raw.js
+ *   node aggregate-from-raw.js                    # 모든 활성 클라이언트
+ *   node aggregate-from-raw.js --client=내일채움  # 특정 클라이언트만
+ *   node aggregate-from-raw.js --client-id=UUID   # 클라이언트 ID로 지정
  */
 
 require('dotenv').config();
@@ -14,7 +16,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-const CLIENT_ID = '79e35fc6-a817-4ccc-9d5d-9a93c1ad4515'; // 비즈액터스쿨
+// 명령줄 인자 파싱
+const args = process.argv.slice(2);
+const clientNameArg = args.find(a => a.startsWith('--client='));
+const clientIdArg = args.find(a => a.startsWith('--client-id='));
+
+const CLIENT_NAME = clientNameArg ? clientNameArg.split('=')[1] : null;
+const CLIENT_ID_DIRECT = clientIdArg ? clientIdArg.split('=')[1] : null;
 
 async function main() {
   console.log('━'.repeat(60));
@@ -22,13 +30,71 @@ async function main() {
   console.log('━'.repeat(60));
   console.log();
 
+  // 클라이언트 목록 조회
+  let clientsToProcess = [];
+
+  if (CLIENT_ID_DIRECT) {
+    // 직접 ID 지정
+    const { data: client } = await supabase
+      .from('clients')
+      .select('id, client_name')
+      .eq('id', CLIENT_ID_DIRECT)
+      .single();
+
+    if (client) {
+      clientsToProcess = [client];
+    } else {
+      console.error('❌ 클라이언트를 찾을 수 없습니다:', CLIENT_ID_DIRECT);
+      return;
+    }
+  } else if (CLIENT_NAME) {
+    // 이름으로 검색
+    const { data: client } = await supabase
+      .from('clients')
+      .select('id, client_name')
+      .eq('client_name', CLIENT_NAME)
+      .single();
+
+    if (client) {
+      clientsToProcess = [client];
+    } else {
+      console.error('❌ 클라이언트를 찾을 수 없습니다:', CLIENT_NAME);
+      return;
+    }
+  } else {
+    // 모든 활성 클라이언트
+    const { data: clients } = await supabase
+      .from('clients')
+      .select('id, client_name')
+      .eq('is_active', true);
+
+    clientsToProcess = clients || [];
+  }
+
+  console.log(`📋 처리할 클라이언트: ${clientsToProcess.length}개`);
+  clientsToProcess.forEach(c => console.log(`   - ${c.client_name}`));
+  console.log();
+
+  // 각 클라이언트별로 처리
+  for (const client of clientsToProcess) {
+    await processClient(client.id, client.client_name);
+  }
+
+  console.log('✅ 전체 집계 완료!');
+}
+
+async function processClient(clientId, clientName) {
+  console.log('━'.repeat(60));
+  console.log(`🔄 [${clientName}] 집계 시작`);
+  console.log('━'.repeat(60));
+
   // 1. raw_data 날짜 범위 확인
   console.log('📅 raw_data 날짜 범위 확인 중...');
 
   const { data: dateData, error: dateError } = await supabase
     .from('raw_data')
     .select('date')
-    .eq('client_id', CLIENT_ID)
+    .eq('client_id', clientId)
     .order('date', { ascending: true });
 
   if (dateError) {
@@ -37,7 +103,7 @@ async function main() {
   }
 
   if (!dateData || dateData.length === 0) {
-    console.error('❌ raw_data에 데이터가 없습니다.');
+    console.log('⚠️  raw_data에 데이터가 없습니다. 스킵합니다.\n');
     return;
   }
 
@@ -54,7 +120,7 @@ async function main() {
   const { error: deleteError } = await supabase
     .from('daily_aggregates')
     .delete()
-    .eq('client_id', CLIENT_ID)
+    .eq('client_id', clientId)
     .gte('date', startDate)
     .lte('date', endDate);
 
@@ -72,23 +138,23 @@ async function main() {
   let errorCount = 0;
 
   for (const date of dates) {
-    console.log(`   처리 중: ${date}...`);
+    process.stdout.write(`   처리 중: ${date}...`);
 
     // raw_data에서 해당 날짜 조회
     const { data: rawData, error: rawError } = await supabase
       .from('raw_data')
       .select('*')
-      .eq('client_id', CLIENT_ID)
+      .eq('client_id', clientId)
       .eq('date', date);
 
     if (rawError) {
-      console.error(`   ❌ 조회 실패:`, rawError.message);
+      console.log(` ❌ 조회 실패: ${rawError.message}`);
       errorCount++;
       continue;
     }
 
     if (!rawData || rawData.length === 0) {
-      console.log(`   ⚠️  데이터 없음`);
+      console.log(` ⚠️  데이터 없음`);
       continue;
     }
 
@@ -100,7 +166,7 @@ async function main() {
 
       if (!adAggregates[adId]) {
         adAggregates[adId] = {
-          client_id: CLIENT_ID,
+          client_id: clientId,
           date: date,
           ad_id: adId,
           ad_name: row.ad_name,
@@ -140,20 +206,20 @@ async function main() {
       .insert(records);
 
     if (insertError) {
-      console.error(`   ❌ 삽입 실패:`, insertError.message);
+      console.log(` ❌ 삽입 실패: ${insertError.message}`);
       if (insertError.message.includes('numeric')) {
         console.error(`   💡 DECIMAL overflow 문제일 가능성 있음`);
         console.error(`   샘플 데이터:`, JSON.stringify(records[0], null, 2));
       }
       errorCount++;
     } else {
-      console.log(`   ✅ 성공 (${records.length}개 광고)`);
+      console.log(` ✅ 성공 (${records.length}개 광고)`);
       successCount++;
     }
   }
 
   console.log('\n━'.repeat(60));
-  console.log('📊 집계 결과:');
+  console.log(`📊 [${clientName}] 집계 결과:`);
   console.log('━'.repeat(60));
   console.log(`   성공: ${successCount}일`);
   console.log(`   실패: ${errorCount}일`);
@@ -166,7 +232,7 @@ async function main() {
     const { data: result, error: resultError } = await supabase
       .from('daily_aggregates')
       .select('date, ad_name, leads, spend, cpl, ctr')
-      .eq('client_id', CLIENT_ID)
+      .eq('client_id', clientId)
       .gte('date', startDate)
       .lte('date', endDate)
       .order('date');
@@ -204,8 +270,6 @@ async function main() {
     console.log(`합계: 리드 ${totalLeads}건, 지출 $${totalSpend.toFixed(2)}`);
     console.log();
   }
-
-  console.log('✅ 집계 완료!');
 }
 
 main();

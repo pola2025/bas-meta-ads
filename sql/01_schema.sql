@@ -52,7 +52,7 @@ CREATE TABLE raw_data (
   campaign_name VARCHAR(200),
   platform VARCHAR(20),
   device VARCHAR(20),
-  currency VARCHAR(3) DEFAULT 'KRW', -- 통화 코드 (KRW, USD 등)
+  currency VARCHAR(3) DEFAULT 'USD', -- 통화 코드 (항상 USD)
   impressions INTEGER DEFAULT 0,
   reach INTEGER DEFAULT 0,
   clicks INTEGER DEFAULT 0,

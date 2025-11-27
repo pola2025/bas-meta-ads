@@ -243,10 +243,41 @@ ${topAds.slice(0, 5).map((ad, i) => `${i+1}. ${ad.ad_name}
 
 // 메인 미리보기 함수
 async function previewReport() {
-  const clientId = "79e35fc6-a817-4ccc-9d5d-9a93c1ad4515";
-  const clientName = "비즈액터스쿨";
-  const weekStart = '2025-11-17';
-  const weekEnd = '2025-11-23';
+  // 명령줄 인자 파싱
+  const args = process.argv.slice(2);
+  const clientArg = args.find(a => a.startsWith('--client='));
+  const filterClient = clientArg ? clientArg.split('=')[1] : null;
+
+  // 클라이언트 조회
+  const { createClient } = require('@supabase/supabase-js');
+  const supabase2 = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+
+  let clientQuery = supabase2.from('clients').select('id, client_name').eq('is_active', true);
+  if (filterClient) {
+    clientQuery = clientQuery.eq('client_name', filterClient);
+  }
+
+  const { data: clients } = await clientQuery;
+  if (!clients || clients.length === 0) {
+    console.log('❌ 클라이언트를 찾을 수 없습니다.');
+    return;
+  }
+
+  const client = clients[0];
+  const clientId = client.id;
+  const clientName = client.client_name;
+
+  // 날짜 계산 (가장 최근 완료된 주)
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const lastSunday = new Date(now);
+  lastSunday.setDate(now.getDate() - dayOfWeek);
+  const thisWeekMonday = new Date(lastSunday);
+  thisWeekMonday.setDate(lastSunday.getDate() - 6);
+
+  const formatDate = (d) => d.toISOString().split('T')[0];
+  const weekStart = formatDate(thisWeekMonday);
+  const weekEnd = formatDate(lastSunday);
 
   console.log(`\n🔍 리포트 미리보기 생성 중...`);
   console.log(`   클라이언트: ${clientName}`);

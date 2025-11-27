@@ -108,14 +108,20 @@ function escapeMd(text) {
   return text.toString().replace(/[-_*[\]()~`>#+\=|{}.!]/g, '\\$&');
 }
 
-// 데이터 조회
-async function fetchMonthlyData(startDate, endDate) {
-  const { data, error } = await supabase
+// 데이터 조회 (클라이언트별 필터링)
+async function fetchMonthlyData(startDate, endDate, clientId) {
+  let query = supabase
     .from('daily_aggregates')
     .select('*')
     .gte('date', startDate)
-    .lte('date', endDate)
-    .order('date', { ascending: true });
+    .lte('date', endDate);
+
+  // 클라이언트 ID가 있으면 필터링
+  if (clientId) {
+    query = query.eq('client_id', clientId);
+  }
+
+  const { data, error } = await query.order('date', { ascending: true });
 
   if (error) {
     console.error('❌ Error:', error.message);
@@ -551,6 +557,10 @@ function generateTelegramMessages(dates, thisStats, prevStats, weekStats, dayOfW
 async function main() {
   console.log('📊 월간 리포트 생성 시작...\n');
 
+  // 클라이언트 ID (환경변수 또는 기본값)
+  const clientId = process.env.CLIENT_ID || '79e35fc6-a817-4ccc-9d5d-9a93c1ad4515';
+  console.log(`👤 클라이언트 ID: ${clientId}`);
+
   // 타겟 월 결정
   const targetMonth = process.env.REPORT_MONTH || null;
   const dates = getMonthDates(targetMonth);
@@ -558,10 +568,10 @@ async function main() {
   console.log(`📅 리포트 기간: ${dates.thisMonth} (${dates.thisMonthStart} ~ ${dates.thisMonthEnd})`);
   console.log(`📅 비교 기간: ${dates.prevMonth} (${dates.prevMonthStart} ~ ${dates.prevMonthEnd})\n`);
 
-  // 1. 데이터 조회
+  // 1. 데이터 조회 (클라이언트별 필터링)
   const [thisMonthData, prevMonthData] = await Promise.all([
-    fetchMonthlyData(dates.thisMonthStart, dates.thisMonthEnd),
-    fetchMonthlyData(dates.prevMonthStart, dates.prevMonthEnd)
+    fetchMonthlyData(dates.thisMonthStart, dates.thisMonthEnd, clientId),
+    fetchMonthlyData(dates.prevMonthStart, dates.prevMonthEnd, clientId)
   ]);
 
   // 2. 통계 계산
@@ -622,7 +632,6 @@ async function main() {
 
   // 7. 텔레그램 메시지 생성
   console.log('📝 텔레그램 메시지 생성 중...\n');
-  const clientId = process.env.CLIENT_ID || '79e35fc6-a817-4ccc-9d5d-9a93c1ad4515'; // 비즈액터스쿨
   const messages = generateTelegramMessages(
     dates,
     thisStats,

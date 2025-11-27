@@ -68,7 +68,11 @@
       "Bash(taskkill:*)",
       "Bash(node test-api-function.js:*)",
       "Bash(node resend-report.js:*)",
-      "WebFetch(domain:stackoverflow.com)"
+      "WebFetch(domain:stackoverflow.com)",
+      "Bash(node lib/backfill.js:*)",
+      "Bash(SKIP_AI=true node send-weekly-report.js:*)",
+      "Bash(npm run build:*)",
+      "mcp__railway-mcp-server__list-services"
     ],
     "deny": [],
     "ask": []

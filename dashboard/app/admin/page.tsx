@@ -213,6 +213,7 @@ export default function AdminPage() {
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
   });
   const [flowLoading, setFlowLoading] = useState(false);
+  const [flowFilter, setFlowFilter] = useState<'general' | 'bizactor'>('general');
 
   // 결제 모달 상태
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -300,7 +301,7 @@ export default function AdminPage() {
     if (!isValidAdmin) return;
     setFlowLoading(true);
     try {
-      const res = await fetch(`/api/admin/monthly-flow?year=${flowMonth.year}&month=${flowMonth.month}`, {
+      const res = await fetch(`/api/admin/monthly-flow?year=${flowMonth.year}&month=${flowMonth.month}&filter=${flowFilter}`, {
         headers: { 'x-admin-key': adminKey || '' },
       });
       const data = await res.json();
@@ -316,7 +317,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     fetchMonthlyFlow();
-  }, [isValidAdmin, flowMonth]);
+  }, [isValidAdmin, flowMonth, flowFilter]);
 
   // 로그 자동 스크롤
   useEffect(() => {
@@ -1062,7 +1063,7 @@ export default function AdminPage() {
 
             {/* 월간 광고 효율 흐름 차트 */}
             <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-6">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-neutral-800 flex items-center gap-2">
                   <BarChart3 className="w-5 h-5 text-blue-600" />
                   월간 광고 효율 흐름
@@ -1096,6 +1097,30 @@ export default function AdminPage() {
                     <RefreshCw className={`w-4 h-4 ${flowLoading ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
+              </div>
+
+              {/* 필터 탭 */}
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={() => setFlowFilter('general')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    flowFilter === 'general'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                  }`}
+                >
+                  일반고객
+                </button>
+                <button
+                  onClick={() => setFlowFilter('bizactor')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    flowFilter === 'bizactor'
+                      ? 'bg-orange-500 text-white'
+                      : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                  }`}
+                >
+                  비즈액터스쿨
+                </button>
               </div>
 
               {/* 월 합계 스코어카드 */}

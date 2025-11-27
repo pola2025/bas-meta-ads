@@ -1,11 +1,13 @@
-# BAS Meta Ads - 데이터 아키텍처 설계서
+# BAS Meta Ads - 시스템 아키텍처 설계서
 
 > **최종 수정**: 2025-11-26
-> **목적**: 데이터 흐름과 테이블 구조를 한눈에 파악
+> **버전**: 2.0 (구조 재정비 완료)
 
 ---
 
-## 1. 핵심 데이터 흐름 (현재 구조)
+## 1. 시스템 개요
+
+BAS Meta Ads Analytics는 다중 클라이언트의 Meta 광고 데이터를 수집, 분석하고 자동 리포트를 발송하는 시스템입니다.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -15,41 +17,108 @@
                          ▼
         ┌─────────────────────────────────────┐
         │         데이터 수집 방식            │
-        │  ┌───────────┐  ┌───────────────┐  │
-        │  │ 일일 수집  │  │   백필 API    │  │
-        │  │ (Cron)    │  │ (/api/backfill)│  │
-        │  └─────┬─────┘  └───────┬───────┘  │
-        └────────┼────────────────┼──────────┘
-                 │                │
-                 ▼                ▼
+        │  ┌───────────────┐  ┌───────────┐  │
+        │  │ 일일 수집     │  │ 백필 API  │  │
+        │  │ (Cron 03:00)  │  │ (수동)    │  │
+        │  └───────┬───────┘  └─────┬─────┘  │
+        └──────────┼────────────────┼────────┘
+                   │                │
+                   ▼                ▼
         ┌─────────────────────────────────────┐
         │          raw_data 테이블            │  ← 원본 저장 (유일한 저장소)
-        │    (client_id, date, ad_id, ...)   │
         └────────────────┬────────────────────┘
                          │
                          ▼ (VIEW 자동 집계)
         ┌─────────────────────────────────────┐
         │     ads_insights_daily (VIEW)       │  ← 대시보드 조회
-        │    GROUP BY client_id, date, ad    │
         └────────────────┬────────────────────┘
                          │
-                         ▼
-        ┌─────────────────────────────────────┐
-        │            대시보드                  │
-        │   (Next.js - Vercel/Railway)       │
-        └─────────────────────────────────────┘
+            ┌────────────┴────────────┐
+            ▼                         ▼
+┌───────────────────┐     ┌───────────────────┐
+│    대시보드       │     │  텔레그램 리포트  │
+│ (Vercel/Railway)  │     │  (주간/월간)      │
+└───────────────────┘     └───────────────────┘
 ```
-
-**핵심 원칙**:
-- 모든 데이터는 `raw_data`에만 저장
-- `ads_insights_daily`는 VIEW (자동 집계)
-- 백필하면 대시보드에 자동 반영
 
 ---
 
-## 2. 테이블 구조
+## 2. 프로젝트 파일 구조
 
-### 2.1 clients (클라이언트 정보)
+```
+F:\bas_meta\
+│
+├── 📂 핵심 스크립트
+│   ├── collect-all-clients.js     # 멀티 클라이언트 데이터 수집 ⭐
+│   ├── cron-collect-data.js       # Cron Job 진입점
+│   ├── start-all.js               # Railway 시작점
+│   ├── index.js                   # 서버 진입점
+│   │
+│   ├── send-weekly-report.js      # 주간 리포트 발송 ⭐
+│   ├── send-monthly-report.js     # 월간 리포트 발송
+│   ├── send-report-now.js         # 즉시 리포트 발송 (테스트용)
+│   └── resend-report.js           # 리포트 재발송
+│
+├── 📂 유틸리티 스크립트
+│   ├── add-new-client.js          # 클라이언트 추가
+│   ├── preview-report.js          # 리포트 미리보기
+│   ├── regenerate-ai-insights.js  # AI 인사이트 재생성
+│   ├── send-dashboard-link.js     # 대시보드 링크 발송
+│   │
+│   ├── check-clients.js           # 클라이언트 목록 확인
+│   ├── check-raw-data.js          # raw_data 확인
+│   ├── check-daily-data.js        # 일별 데이터 확인
+│   ├── check-weekly-data.js       # 주간 데이터 확인
+│   ├── check-7day-data.js         # 7일 데이터 확인
+│   ├── check-weekly-summary.js    # weekly_summary 확인
+│   ├── check-archive-data.js      # 아카이브 데이터 확인
+│   └── check-data-dates.js        # 날짜별 데이터 확인
+│
+├── 📂 lib/ (라이브러리)
+│   ├── backfill.js                # 백필 로직
+│   ├── encryption.js              # 토큰 암호화/복호화
+│   ├── token-manager.js           # 토큰 관리
+│   ├── meta.js                    # Meta API 호출
+│   ├── telegram.js                # 텔레그램 기본 API
+│   ├── telegram-notifier.js       # 텔레그램 알림
+│   ├── telegram-chart.js          # 텔레그램 차트 생성
+│   ├── chart-generator.js         # 차트 생성
+│   ├── data-integrity.js          # 데이터 무결성 검사
+│   ├── monthly-summary.js         # 월간 요약 생성
+│   ├── report-storage.js          # 리포트 저장
+│   └── reporter/                  # 리포트 생성 모듈
+│
+├── 📂 sql/ (데이터베이스 스키마)
+│   ├── 01_schema.sql              # 기본 테이블 (clients, raw_data)
+│   ├── 02_functions_timezone.sql  # 타임존 함수
+│   ├── 03_vault_functions.sql     # Vault 함수
+│   ├── 04_ads_insights_daily_view.sql  # VIEW 정의
+│   ├── 17_fix_ads_insights_view.sql    # VIEW 수정 (현재 사용) ⭐
+│   └── ... (마이그레이션 파일들)
+│
+├── 📂 dashboard/ (Next.js 대시보드)
+│   ├── app/
+│   │   ├── api/backfill/route.ts  # 백필 API ⭐
+│   │   └── ...
+│   └── lib/api.ts                 # 대시보드 API 함수
+│
+├── 📂 _backup/ (미사용 파일 백업)
+│   ├── scripts/                   # 레거시/일회성 스크립트
+│   ├── lib/                       # Redis 의존 라이브러리
+│   ├── docs/                      # 이전 문서들
+│   │   └── 회고/                  # 작업 회고록
+│   └── sql/
+│
+├── DATA_ARCHITECTURE.md           # 이 문서 ⭐
+├── README.md                      # 프로젝트 소개
+└── NEXT_SESSION.md                # 다음 세션 안내
+```
+
+---
+
+## 3. 데이터베이스 구조
+
+### 3.1 clients (클라이언트 정보)
 
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
@@ -63,9 +132,7 @@
 | service_start_date | DATE | 서비스 시작일 |
 | service_end_date | DATE | 서비스 종료일 |
 
----
-
-### 2.2 raw_data (원본 광고 데이터) ⭐ 핵심
+### 3.2 raw_data (원본 광고 데이터) ⭐ 핵심
 
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
@@ -84,31 +151,17 @@
 | clicks | INTEGER | 클릭수 |
 | leads | INTEGER | 리드수 |
 | spend | DECIMAL | 지출액 |
-| video_views | INTEGER | 동영상 조회수 |
-| avg_watch_time | DECIMAL | 평균 시청 시간 |
 
 **UNIQUE 제약**: `(client_id, date, ad_id, platform, device)`
 
-**인덱스**:
-- `idx_raw_data_client_date` (client_id, date DESC)
-- `idx_raw_data_date` (date DESC)
-- `idx_raw_data_ad_name` (ad_name)
-
----
-
-### 2.3 ads_insights_daily (VIEW) ⭐ 대시보드 소스
+### 3.3 ads_insights_daily (VIEW) ⭐ 대시보드 소스
 
 > ⚠️ **중요**: 테이블이 아니라 **VIEW**입니다. INSERT/UPDATE 불가!
 
 ```sql
--- sql/17_fix_ads_insights_view.sql
 CREATE VIEW ads_insights_daily AS
 SELECT
-  client_id,
-  date,
-  platform,
-  campaign_name,
-  ad_name,
+  client_id, date, platform, campaign_name, ad_name,
   SUM(impressions) as impressions,
   SUM(reach) as reach,
   SUM(clicks) as clicks,
@@ -125,14 +178,7 @@ GROUP BY client_id, date, platform, campaign_name, ad_name
 ORDER BY date DESC, spend DESC;
 ```
 
-**특징**:
-- raw_data에서 자동 집계
-- platform + device 통합 (device별 분리 불필요)
-- CTR, CVR, CPL, CPC, CPM 자동 계산
-
----
-
-### 2.4 weekly_summary (주간 집계)
+### 3.4 weekly_summary (주간 집계)
 
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
@@ -144,36 +190,31 @@ ORDER BY date DESC, spend DESC;
 | total_clicks | INTEGER | 주간 클릭 합계 |
 | total_leads | INTEGER | 주간 리드 합계 |
 | total_spend | DECIMAL | 주간 지출 합계 |
-| avg_ctr | DECIMAL | 평균 CTR |
-| avg_cpl | DECIMAL | 평균 CPL |
-
-**용도**: 주간 리포트 생성, 텔레그램 발송
 
 ---
 
-### 2.5 daily_aggregates (일별 집계 - 레거시)
+## 4. 주요 데이터 흐름
 
-> ⚠️ **현재 미사용**. 성능 최적화가 필요할 때 활용 가능.
-
-기존에 VIEW가 이 테이블을 참조했으나, 현재는 raw_data 기반 VIEW 사용.
-
----
-
-## 3. 서비스별 데이터 흐름
-
-### 3.1 일일 데이터 수집 (Cron)
+### 4.1 일일 데이터 수집 (Cron)
 
 ```
-Railway: bas-meta-cron-collector
-  └─→ cron-collect-data.js (매일 03:00 KST)
-      └─→ collect-direct.js
-          └─→ Meta API 호출 (어제 데이터)
-              └─→ raw_data UPSERT
+Railway: bas-meta-cron-collector (03:00 KST)
+  └─→ cron-collect-data.js
+      └─→ collect-all-clients.js
+          ├─→ clients 테이블에서 is_active=true 조회
+          ├─→ 각 클라이언트별 토큰 복호화 (AES-256)
+          ├─→ Meta API 호출 (기본 7일)
+          ├─→ raw_data UPSERT
+          └─→ 텔레그램 알림 (-1003394139746)
 ```
 
----
+**사용법**:
+```bash
+node collect-all-clients.js              # 기본 7일
+DATA_DAYS=14 node collect-all-clients.js # 14일
+```
 
-### 3.2 백필 API (수동 재수집)
+### 4.2 백필 API (수동 재수집)
 
 ```
 Vercel 대시보드: /admin 페이지
@@ -195,56 +236,26 @@ Body: {
 }
 ```
 
----
-
-### 3.3 대시보드 조회
+### 4.3 주간/월간 리포트 발송
 
 ```
-대시보드 페이지
-  └─→ dashboard/lib/api.ts
-      └─→ supabase.from('ads_insights_daily')
-          └─→ VIEW 자동 집계 결과 반환
-```
-
-**주요 API 함수**:
-| 함수 | 데이터 소스 | 용도 |
-|------|------------|------|
-| getDailyTrend() | ads_insights_daily | 일별 추이 차트 |
-| getKPISummary() | ads_insights_daily | KPI 요약 카드 |
-| getTopAds() | ads_insights_daily | 광고 성과 순위 |
-| getPlatformPerformance() | raw_data | 플랫폼별 분석 |
-
----
-
-## 4. 테이블 관계도
-
-```
-┌─────────────┐
-│   clients   │ ──────────────────────────────────────┐
-└──────┬──────┘                                       │
-       │ 1:N (client_id FK)                          │
-       ▼                                              │
-┌─────────────┐      VIEW 자동 집계     ┌────────────┴────────────┐
-│  raw_data   │ ─────────────────────→  │  ads_insights_daily     │
-│  (원본)     │                         │  (대시보드 메인 소스)    │
-└──────┬──────┘                         └─────────────────────────┘
-       │
-       │ RPC 호출 (generate_weekly_summary)
-       ▼
-┌─────────────────┐
-│ weekly_summary  │ ← 주간 리포트용
-└─────────────────┘
+Railway: bas-meta-ads (Cron)
+  ├─→ 주간: send-weekly-report.js (월요일 10:00 KST)
+  └─→ 월간: send-monthly-report.js (매월 1일 10:00 KST)
+      ├─→ raw_data에서 기간 데이터 집계
+      ├─→ AI 인사이트 생성 (Gemini)
+      ├─→ 텔레그램 리포트 발송
+      └─→ telegram_reports 테이블 저장
 ```
 
 ---
 
 ## 5. Railway 서비스 구성
 
-| 서비스 | 역할 | 시작 명령어 |
-|--------|------|------------|
-| bas-meta-ads | Cron 스케줄러 (주간 리포트) | `node start-all.js` |
-| bas-meta-cron-collector | 일일 데이터 수집 | `node cron-collect-data.js` |
-| bas-meta-ads-dashboard | (Railway 대시보드) | Next.js |
+| 서비스 | 역할 | 시작 명령어 | Cron |
+|--------|------|------------|------|
+| bas-meta-ads | 리포트 발송 | `node start-all.js` | 주간/월간 |
+| bas-meta-cron-collector | 데이터 수집 | `node cron-collect-data.js` | 매일 03:00 |
 
 **Vercel**: 대시보드 프로덕션 (`bas-meta-ads.vercel.app`)
 
@@ -272,6 +283,11 @@ TELEGRAM_ADMIN_CHAT_ID=<관리자 채팅 ID>
 # 백필 알림 채널 (하드코딩): -1003394139746
 ```
 
+### AI (Gemini)
+```
+GEMINI_API_KEY=<Gemini API 키>
+```
+
 ### 인증
 ```
 NEXT_PUBLIC_ADMIN_KEY=<관리자 키>
@@ -279,67 +295,46 @@ NEXT_PUBLIC_ADMIN_KEY=<관리자 키>
 
 ---
 
-## 7. 주요 파일 위치
+## 7. 핵심 원칙
 
-```
-F:\bas_meta\
-├── sql/
-│   ├── 01_schema.sql                    # 기본 테이블 (clients, raw_data)
-│   ├── 04_ads_insights_daily_view.sql   # VIEW 원본 정의
-│   ├── 17_fix_ads_insights_view.sql     # VIEW 수정 (raw_data 기반) ⭐
-│   └── 06_daily_aggregates.sql          # 레거시 집계 테이블
-│
-├── collect-direct.js                    # 일일 수집 스크립트
-├── cron-collect-data.js                 # Cron Job 진입점
-├── start-all.js                         # Railway 시작점
-│
-├── dashboard/
-│   ├── lib/api.ts                       # 대시보드 API 함수 ⭐
-│   └── app/api/backfill/route.ts        # 백필 API ⭐
-│
-└── DATA_ARCHITECTURE.md                 # 이 문서
-```
+1. **단일 진실 소스**: 모든 데이터는 `raw_data`에만 저장
+2. **VIEW 자동 집계**: `ads_insights_daily`는 VIEW (자동 계산)
+3. **Redis 없음**: 직접 실행 방식 (큐 시스템 제거)
+4. **텔레그램 알림 분리**:
+   - 백필/시스템 알림 → `-1003394139746` (관리자)
+   - 클라이언트 리포트 → 클라이언트별 `telegram_chat_id`
 
 ---
 
-## 8. 변경 이력
-
-| 날짜 | 변경 내용 |
-|------|----------|
-| 2025-11-26 | VIEW를 raw_data 기반으로 복원 (sql/17_fix_ads_insights_view.sql) |
-| 2025-11-26 | 백필 API 단순화 - daily_aggregates 동기화 제거 |
-| 2025-11-26 | Worker 제거 (Redis 미사용) |
-| 2025-11-25 | VIEW를 daily_aggregates 기반으로 변경 (문제 발생) |
-
----
-
-## 9. 트러블슈팅
+## 8. 트러블슈팅
 
 ### Q: 백필했는데 대시보드에 안 보여요
-**A**: VIEW가 raw_data 기반인지 확인.
+**A**: VIEW가 raw_data 기반인지 확인
 ```sql
--- Supabase SQL Editor에서 실행
 -- sql/17_fix_ads_insights_view.sql 내용 실행
 ```
 
+### Q: 데이터 수집이 안 돼요
+**A**:
+1. `node check-clients.js`로 활성 클라이언트 확인
+2. 토큰 복호화 확인 (`TOKEN_ENCRYPTION_KEY`)
+3. Meta API 권한 확인
+
 ### Q: 텔레그램 알림이 안 와요
 **A**:
-1. Vercel 환경 변수에 `TELEGRAM_BOT_TOKEN` 설정
-2. Vercel 재배포
-
-### Q: Meta API rate limit 에러
-**A**: 1시간 후 재시도. 한 번에 너무 많은 백필 요청 금지.
-
-### Q: VIEW가 daily_aggregates를 참조하고 있어요
-**A**: `sql/17_fix_ads_insights_view.sql` 실행하여 raw_data 기반으로 변경.
+1. `TELEGRAM_BOT_TOKEN` 환경 변수 확인
+2. 클라이언트별 `telegram_chat_id` 확인
 
 ---
 
-## 10. 다음 단계 (향후 개선)
+## 9. 변경 이력
 
-- [ ] daily_aggregates 성능 최적화용 활용 검토
-- [ ] 월간 리포트 기능 추가
-- [ ] 실시간 대시보드 (WebSocket)
+| 날짜 | 변경 내용 |
+|------|----------|
+| 2025-11-26 | 프로젝트 구조 재정비, 미사용 파일 _backup으로 이동 |
+| 2025-11-26 | 멀티 클라이언트 수집 스크립트 추가 (collect-all-clients.js) |
+| 2025-11-26 | cron-collect-data.js Redis 의존성 제거 |
+| 2025-11-26 | VIEW를 raw_data 기반으로 복원 |
 
 ---
 

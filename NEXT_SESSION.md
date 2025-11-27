@@ -1,91 +1,105 @@
 # 다음 세션 작업 요청
 
-**작성일**: 2025-11-26
-**상태**: 클라이언트 관리 기능 구현 완료
+> **작성일**: 2025-11-26
+> **프로젝트**: BAS Meta Ads Analytics
 
 ---
 
-## 1. 이번 세션 완료 작업
+## ✅ 완료된 작업 (2025-11-26)
 
-### 플랫폼별 성과 배포 이슈 해결 ✅
-- **원인**: `raw_data` 테이블 RLS 정책으로 anon 키 접근 차단
-- **해결**: `raw_data` 테이블에 anon 읽기 정책 추가
-```sql
-CREATE POLICY "Allow anon read access for raw_data"
-ON raw_data FOR SELECT TO anon USING (true);
+### Phase 2: Admin 대시보드 API 구현 완료
+
+**생성된 API 엔드포인트:**
+
+| 경로 | 메서드 | 기능 |
+|------|--------|------|
+| `/api/admin/clients` | GET | 클라이언트 목록 조회 (데이터 현황 포함) |
+| `/api/admin/clients` | POST | 클라이언트 추가 (토큰 검증 자동 실행) |
+| `/api/admin/clients/[id]` | GET | 클라이언트 상세 조회 |
+| `/api/admin/clients/[id]` | PATCH | 클라이언트 수정 |
+| `/api/admin/clients/[id]` | DELETE | 클라이언트 삭제 |
+| `/api/admin/status` | GET | 시스템 전체 상태 조회 |
+| `/api/admin/backfill` | GET | 백필 가능 여부 확인 |
+| `/api/admin/backfill` | POST | **SSE 실시간 로그 백필** |
+
+**주요 기능:**
+1. ✅ 토큰 자동 검증 - 클라이언트 추가 시 Meta API 토큰 유효성 검사
+2. ✅ SSE 실시간 로그 - 백필 실행 시 터미널처럼 실시간 로그 스트리밍
+3. ✅ 90일 초과 자동 분할 - 180일, 1년 백필도 30일 단위로 자동 분할
+4. ✅ 시스템 현황 대시보드 - 활성 클라이언트, 데이터 수집, 7일 성과, 경고 알림
+5. ✅ **Rate Limit 감지 및 1시간 타이머**
+   - Meta API Rate Limit 발생 시 자동 감지 (코드 4, 17, 32, 613)
+   - 관리자 텔레그램 알림 발송
+   - 1시간 카운트다운 타이머 UI (HH:MM:SS)
+   - 타이머 종료 후 자동 재시도
+
+**Admin UI 업데이트:**
+- 시스템 현황 카드 (접기/펼치기)
+- 클라이언트별 데이터 건수, 최신 데이터 날짜 표시
+- 백필 모달 (SSE 실시간 로그 터미널)
+- 기간 프리셋 (7일, 30일, 90일, 180일, 1년)
+- Rate Limit 타이머 시각화 + 진행 바
+
+---
+
+## 🎯 다음 세션 작업 후보
+
+### Option 1: Phase 3 - 영상 데이터 수집
+```javascript
+// Meta API 필드 추가
+fields: '...,video_avg_time_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions'
 ```
+- DB 스키마 수정 (video_views, video_avg_time 등)
+- VIEW 및 대시보드 영상 지표 표시
 
-### 클라이언트 관리 기능 구현 ✅
-- 관리자 페이지: `/admin?admin=관리자키`
-- API 라우트: `/api/clients` (CRUD)
-- service_role 키 분리 (`lib/supabase-admin.ts`)
+### Option 2: CLI 도구 Railway 배포
+- `add-client.js`, `backfill-cli.js`, `status.js` Railway 배포
+- Cron Job으로 자동 데이터 수집
 
-### 입력 필드
-| 필드 | 필수 | 설명 |
-|------|------|------|
-| 클라이언트명 | ✅ | 회사/브랜드 이름 |
-| 이메일 | ✅ | 연락용 이메일 |
-| Meta 광고계정 ID | - | act_XXXXXXXXX |
-| Meta Access Token | - | 장기 토큰 (생성 시만) |
-| 텔레그램 채팅 ID | - | 리포트 발송용 |
-| 플랜 타입 | - | free/basic/premium |
-| 월 목표 리드 | - | 숫자 |
-| 월 목표 예산 ($) | - | 달러 |
-| 목표 CPL ($) | - | 달러 |
+### Option 3: 대시보드 고급 기능
+- 클라이언트별 상세 페이지
+- 기간별 비교 차트
+- CSV/Excel 내보내기
 
-### Supabase 마이그레이션 (실행 완료)
-```sql
--- clients 테이블에 telegram_chat_id 컬럼 추가
-ALTER TABLE clients ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(50);
-CREATE INDEX IF NOT EXISTS idx_clients_telegram_chat_id ON clients(telegram_chat_id);
+### Option 4: 텔레그램 봇 고도화
+- 대화형 명령어 (`/status`, `/backfill` 등)
+- 일일 자동 리포트 스케줄링
+
+---
+
+## 📁 프로젝트 구조
+
+```
+bas_meta/
+├── dashboard/           # Next.js 대시보드 (Vercel 배포)
+│   ├── app/
+│   │   ├── admin/       # Admin 페이지
+│   │   └── api/
+│   │       ├── admin/   # ✅ 신규 Admin API
+│   │       │   ├── clients/
+│   │       │   ├── backfill/
+│   │       │   └── status/
+│   │       └── ...
+│   └── lib/
+├── lib/                 # 공통 라이브러리
+├── sql/                 # SQL 스키마
+├── _backup/             # 미사용 파일 백업
+├── OPERATION_GUIDE.md   # 운영 기획서
+└── NEXT_SESSION.md      # 이 파일
 ```
 
 ---
 
-## 2. 생성된 파일
+## ⚠️ 주의사항
 
-| 파일 | 설명 |
-|------|------|
-| `dashboard/lib/supabase-admin.ts` | service_role 키 사용 (서버 전용) |
-| `dashboard/app/api/clients/route.ts` | 클라이언트 CRUD API |
-| `dashboard/app/admin/page.tsx` | 관리자 페이지 UI |
-| `sql/17_raw_data_rls_policy.sql` | raw_data RLS 정책 |
-| `sql/18_add_telegram_chat_id.sql` | telegram_chat_id 컬럼 |
+1. **텔레그램 발송 테스트 시 항상 테스트 채팅 ID 사용**
+2. **백필 알림은 관리자 채널만** (`-1003394139746`)
+3. **클라이언트 채널로 테스트 메시지 발송 금지**
 
 ---
 
-## 3. Vercel 환경변수 추가 필요
+## 🚀 다음 세션 시작 명령
 
-Vercel Dashboard에서 다음 환경변수 추가:
 ```
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+다음 작업 진행해줘. Option 선택하거나 새 요청 알려줘.
 ```
-(service_role 키 - 클라이언트 관리 API용)
-
----
-
-## 4. 다음 작업 예정
-
-1. **Vercel 배포 후 테스트**
-   - 클라이언트 관리 페이지 테스트
-   - 새 클라이언트 생성 테스트
-
-2. **텔레그램 리포트 연동**
-   - 클라이언트별 telegram_chat_id 사용하여 리포트 발송
-
-3. **대시보드 기능 개선**
-   - 목표 대비 실적 표시
-   - 월간 리포트 기능
-
----
-
-## 5. 개발 서버
-
-```bash
-cd F:/bas_meta/dashboard && npm run dev
-```
-
-### URL
-- **로컬 대시보드**: http://localhost:3000?admin=a3f8c2e1-9d4b-4f7a-b6c5-8e2d1f0a9b3c
-- **관리자 페이지**: http://localhost:3000/admin?admin=a3f8c2e1-9d4b-4f7a-b6c5-8e2d1f0a9b3c
-- **배포 대시보드**: https://bas-meta-ads-git-main-mkt9834-4301s-projects.vercel.app/?client=79e35fc6-a817-4ccc-9d5d-9a93c1ad4515
