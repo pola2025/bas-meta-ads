@@ -1309,29 +1309,25 @@ export default function AdminPage() {
                           if (!payload?.day || !cx || !cy) return <circle cx={0} cy={0} r={0} />;
                           const isHighCpl = payload.cpl >= 20;
                           return (
-                            <circle
-                              cx={cx}
-                              cy={cy}
-                              r={isHighCpl ? 5 : 3}
-                              fill={isHighCpl ? '#dc2626' : '#ef4444'}
-                              stroke={isHighCpl ? '#fef2f2' : 'none'}
-                              strokeWidth={isHighCpl ? 2 : 0}
-                            />
+                            <g>
+                              <circle
+                                cx={cx}
+                                cy={cy}
+                                r={isHighCpl ? 5 : 3}
+                                fill={isHighCpl ? '#dc2626' : '#ef4444'}
+                                stroke={isHighCpl ? '#fef2f2' : 'none'}
+                                strokeWidth={isHighCpl ? 2 : 0}
+                              />
+                              {isHighCpl && (
+                                <text x={cx} y={cy - 14} textAnchor="middle" fontSize={12}>
+                                  🚨
+                                </text>
+                              )}
+                            </g>
                           );
                         }}
                         activeDot={{ r: 5 }}
                         name="cpl"
-                        label={(props: any) => {
-                          const { x, y, payload } = props;
-                          if (!payload?.day) return <text />;
-                          const isHighCpl = payload.cpl >= 20;
-                          if (!isHighCpl) return <text />;
-                          return (
-                            <text x={x} y={y - 12} textAnchor="middle" fontSize={14}>
-                              🚨
-                            </text>
-                          );
-                        }}
                       />
                     </ComposedChart>
                   </ResponsiveContainer>
