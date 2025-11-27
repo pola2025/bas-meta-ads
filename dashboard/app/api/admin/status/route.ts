@@ -66,9 +66,9 @@ export async function GET(request: NextRequest) {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const since = sevenDaysAgo.toISOString().split('T')[0];
 
-    const { data: recentData } = await supabaseAdmin
+    const { data: recentData, count: recent7DaysCount } = await supabaseAdmin
       .from('raw_data')
-      .select('impressions, clicks, leads, spend, avg_watch_time')
+      .select('impressions, clicks, leads, spend, avg_watch_time', { count: 'exact' })
       .gte('date', since);
 
     let recent7DaysTotals = { impressions: 0, clicks: 0, leads: 0, spend: 0, watchTimeSum: 0, watchTimeCount: 0 };
@@ -148,6 +148,7 @@ export async function GET(request: NextRequest) {
       dataCollection: {
         todayRecords: todayDataCount || 0,
         yesterdayRecords: yesterdayDataCount || 0,
+        recent7DaysRecords: recent7DaysCount || 0,
         missingDataClients: missingDataClients.length,
         missingList: missingDataClients.map((c) => ({
           id: c.id,

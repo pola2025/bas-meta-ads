@@ -73,6 +73,7 @@ interface SystemStatus {
   dataCollection: {
     todayRecords: number;
     yesterdayRecords: number;
+    recent7DaysRecords: number;
     missingDataClients: number;
     missingList: Array<{ id: string; name: string; lastDate: string | null }>;
   };
@@ -872,9 +873,9 @@ export default function AdminPage() {
                     <div className="text-2xl font-bold text-blue-700">{systemStatus.clients.active}</div>
                   </div>
                   <div className="bg-green-50 rounded-lg p-4">
-                    <div className="text-sm text-green-600 font-medium">오늘 수집</div>
+                    <div className="text-sm text-green-600 font-medium">7일 수집</div>
                     <div className="text-2xl font-bold text-green-700">
-                      {systemStatus.dataCollection.todayRecords.toLocaleString()}건
+                      {systemStatus.dataCollection.recent7DaysRecords.toLocaleString()}건
                     </div>
                   </div>
                   <div className="bg-purple-50 rounded-lg p-4">
