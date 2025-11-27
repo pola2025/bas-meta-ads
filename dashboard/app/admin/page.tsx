@@ -1169,7 +1169,8 @@ export default function AdminPage() {
                         orientation="left"
                         tick={{ fontSize: 11, fill: '#6b7280' }}
                         tickLine={{ stroke: '#d1d5db' }}
-                        label={{ value: '지출 ($)', angle: -90, position: 'insideLeft', fontSize: 11, fill: '#6b7280' }}
+                        label={{ value: '리드', angle: -90, position: 'insideLeft', fontSize: 11, fill: '#6b7280' }}
+                        domain={[0, (dataMax: number) => Math.max(dataMax * 1.3, 5)]}
                       />
                       <YAxis
                         yAxisId="right"
@@ -1177,6 +1178,12 @@ export default function AdminPage() {
                         tick={{ fontSize: 11, fill: '#6b7280' }}
                         tickLine={{ stroke: '#d1d5db' }}
                         label={{ value: 'CPL ($)', angle: 90, position: 'insideRight', fontSize: 11, fill: '#6b7280' }}
+                      />
+                      <YAxis
+                        yAxisId="watchTime"
+                        orientation="right"
+                        hide={true}
+                        domain={[0, (dataMax: number) => Math.max(dataMax * 1.5, 60)]}
                       />
                       <Tooltip
                         contentStyle={{
@@ -1189,6 +1196,11 @@ export default function AdminPage() {
                           if (name === 'spend') return [`$${value.toFixed(2)}`, '지출'];
                           if (name === 'cpl') return [`$${value.toFixed(2)}`, 'CPL'];
                           if (name === 'leads') return [value, '리드'];
+                          if (name === 'avgWatchTime') {
+                            if (value <= 0) return ['-', '평균 시청'];
+                            if (value < 60) return [`${value.toFixed(1)}초`, '평균 시청'];
+                            return [`${Math.floor(value / 60)}분 ${Math.round(value % 60)}초`, '평균 시청'];
+                          }
                           return [value, name];
                         }}
                         labelFormatter={(day) => `${flowMonth.month}월 ${day}일`}
@@ -1217,18 +1229,33 @@ export default function AdminPage() {
                           fill: '#8b5cf6',
                         }}
                       />
-                      {/* 지출 막대 */}
-                      <Bar yAxisId="left" dataKey="spend" fill="#3b82f6" radius={[2, 2, 0, 0]} name="spend" />
-                      {/* 리드 영역 */}
+                      {/* 평균 시청시간 범위 영역 (배경) */}
                       <Area
-                        yAxisId="left"
+                        yAxisId="watchTime"
                         type="monotone"
+                        dataKey="avgWatchTime"
+                        fill="url(#watchTimeGradient)"
+                        fillOpacity={0.3}
+                        stroke="#14b8a6"
+                        strokeWidth={1.5}
+                        strokeDasharray="4 2"
+                        name="avgWatchTime"
+                      />
+                      <defs>
+                        <linearGradient id="watchTimeGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#14b8a6" stopOpacity={0.4} />
+                          <stop offset="50%" stopColor="#14b8a6" stopOpacity={0.2} />
+                          <stop offset="100%" stopColor="#14b8a6" stopOpacity={0.05} />
+                        </linearGradient>
+                      </defs>
+                      {/* 리드 막대 */}
+                      <Bar
+                        yAxisId="left"
                         dataKey="leads"
                         fill="#10b981"
-                        fillOpacity={0.2}
-                        stroke="#10b981"
-                        strokeWidth={2}
+                        radius={[3, 3, 0, 0]}
                         name="leads"
+                        minPointSize={3}
                       />
                       {/* CPL 라인 */}
                       <Line
@@ -1251,11 +1278,7 @@ export default function AdminPage() {
               )}
 
               {/* 범례 */}
-              <div className="mt-4 flex items-center justify-center gap-6 text-xs text-neutral-600">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 bg-blue-500 rounded" />
-                  <span>광고 지출</span>
-                </div>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-xs text-neutral-600">
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-3 bg-green-500 rounded" />
                   <span>리드</span>
@@ -1267,6 +1290,10 @@ export default function AdminPage() {
                 <div className="flex items-center gap-1.5">
                   <div className="w-4 h-0.5 bg-purple-500" style={{ borderTop: '2px dashed #8b5cf6' }} />
                   <span>평균 CPL</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 bg-teal-400 rounded opacity-50" />
+                  <span>평균 시청시간</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-3 bg-red-200 rounded" />
