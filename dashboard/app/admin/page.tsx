@@ -1306,6 +1306,7 @@ export default function AdminPage() {
                         strokeWidth={2}
                         dot={(props: any) => {
                           const { cx, cy, payload } = props;
+                          if (!payload?.day || !cx || !cy) return <circle cx={0} cy={0} r={0} />;
                           const isInefficient = monthlyFlowData.analysis.inefficientDays.includes(payload.day);
                           return (
                             <circle
@@ -1322,6 +1323,7 @@ export default function AdminPage() {
                         name="cpl"
                         label={(props: any) => {
                           const { x, y, payload } = props;
+                          if (!payload?.day) return <text />;
                           const isInefficient = monthlyFlowData.analysis.inefficientDays.includes(payload.day);
                           if (!isInefficient) return <text />;
                           return (
