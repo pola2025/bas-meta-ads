@@ -1161,8 +1161,23 @@ export default function AdminPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis
                         dataKey="day"
-                        tick={{ fontSize: 11, fill: '#6b7280' }}
+                        tick={({ x, y, payload }) => {
+                          const dayOfWeek = new Date(flowMonth.year, flowMonth.month - 1, payload.value).getDay();
+                          const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+                          const weekdayColors = ['#ef4444', '#6b7280', '#6b7280', '#6b7280', '#6b7280', '#6b7280', '#3b82f6'];
+                          return (
+                            <g transform={`translate(${x},${y})`}>
+                              <text x={0} y={0} dy={12} textAnchor="middle" fontSize={11} fill="#6b7280">
+                                {payload.value}
+                              </text>
+                              <text x={0} y={0} dy={24} textAnchor="middle" fontSize={9} fill={weekdayColors[dayOfWeek]}>
+                                {weekdays[dayOfWeek]}
+                              </text>
+                            </g>
+                          );
+                        }}
                         tickLine={{ stroke: '#d1d5db' }}
+                        height={40}
                       />
                       <YAxis
                         yAxisId="left"
