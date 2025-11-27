@@ -803,11 +803,37 @@ async function main() {
   }
 
   console.log(`👥 대상 클라이언트: ${clients.length}개`);
-  clients.forEach(c => {
+
+  // slug가 없는 클라이언트에 자동 생성
+  for (const c of clients) {
+    if (!c.slug) {
+      const crypto = require('crypto');
+      const base = c.client_name
+        .toLowerCase()
+        .replace(/[가-힣]+/g, match => {
+          const cho = ['g','kk','n','d','tt','r','m','b','pp','s','ss','','j','jj','ch','k','t','p','h'];
+          return match.split('').map(char => {
+            const code = char.charCodeAt(0) - 44032;
+            if (code < 0 || code > 11171) return '';
+            return cho[Math.floor(code / 588)] || '';
+          }).join('');
+        })
+        .replace(/[^a-z0-9]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .substring(0, 20);
+      const random = crypto.randomBytes(3).toString('hex');
+      c.slug = `${base}-${random}`;
+
+      // DB 업데이트
+      await supabase.from('clients').update({ slug: c.slug }).eq('id', c.id);
+      console.log(`   ⚙️ ${c.client_name}: slug 자동 생성 → ${c.slug}`);
+    }
+
     const chatStatus = c.telegram_chat_id ? '✅' : '❌';
     const enabledStatus = c.telegram_enabled !== false ? '🔔' : '🔕';
     console.log(`   ${chatStatus} ${enabledStatus} ${c.client_name}`);
-  });
+  }
 
   // 2. 각 클라이언트별 리포트 생성 및 발송
   const results = [];
