@@ -439,7 +439,7 @@ ${aiAnalysisText ? `━━━━━━━━━━━━━━━━━━━━
           chat_id: chatId,
           text: message,
           parse_mode: "Markdown",
-          disable_web_page_preview: false
+          disable_web_page_preview: true
         })
       }
     );

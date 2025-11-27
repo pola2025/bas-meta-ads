@@ -343,7 +343,7 @@ ${actionsText ? `━━━━━━━━━━━━━━━━━━━━━
           chat_id: chatId,
           text: message,
           parse_mode: "Markdown",
-          disable_web_page_preview: false
+          disable_web_page_preview: true
         })
       }
     );
@@ -416,17 +416,86 @@ async function sendWeeklyReports() {
 console.log("🤖 BAS Telegram Report Scheduler v2.0 Started");
 console.log("━".repeat(50));
 
+// 주간 리포트: 매주 월요일 09:00 KST
 cron.schedule('0 9 * * 1', async () => {
-  console.log("\n⏰ Scheduled task triggered");
+  console.log("\n⏰ Weekly report scheduled task triggered");
   await sendWeeklyReports();
 }, {
   timezone: "Asia/Seoul"
 });
 
-console.log("✅ Cron job scheduled:");
-console.log("   - Every Monday at 09:00 (KST)");
-console.log("   - Reports last week's data (Monday ~ Sunday)");
+// 월간 리포트: 매월 1일 09:00 KST
+cron.schedule('0 9 1 * *', async () => {
+  console.log("\n⏰ Monthly report scheduled task triggered");
+  await sendMonthlyReports();
+}, {
+  timezone: "Asia/Seoul"
+});
+
+console.log("✅ Cron jobs scheduled:");
+console.log("   📅 Weekly:  Every Monday at 09:00 (KST) - Last week's data");
+console.log("   📅 Monthly: 1st of every month at 09:00 (KST) - Previous month's data");
 console.log("");
+
+// 월간 리포트 발송 작업
+async function sendMonthlyReports() {
+  console.log("\n📊 Starting monthly report job...");
+  console.log(`   Time: ${new Date().toISOString()}`);
+
+  const { data: clients, error } = await supabase
+    .from("clients")
+    .select("client_id, client_name")
+    .eq("is_active", true);
+
+  if (error || !clients || clients.length === 0) {
+    console.log("⚠️ No active clients found");
+    return;
+  }
+
+  console.log(`✅ Found ${clients.length} active client(s)`);
+
+  // send-monthly-report.js를 각 클라이언트별로 실행
+  const { spawn } = require('child_process');
+
+  for (const client of clients) {
+    console.log(`\n📧 Sending monthly report for: ${client.client_name}`);
+
+    try {
+      await new Promise((resolve, reject) => {
+        const child = spawn('node', ['send-monthly-report.js'], {
+          env: {
+            ...process.env,
+            CLIENT_ID: client.client_id
+          },
+          cwd: process.cwd(),
+          stdio: 'inherit'
+        });
+
+        child.on('close', (code) => {
+          if (code === 0) {
+            console.log(`✅ Monthly report sent for ${client.client_name}`);
+            resolve();
+          } else {
+            console.error(`❌ Monthly report failed for ${client.client_name} (code: ${code})`);
+            resolve(); // 실패해도 다음 클라이언트 진행
+          }
+        });
+
+        child.on('error', (err) => {
+          console.error(`❌ Error spawning process for ${client.client_name}:`, err.message);
+          resolve(); // 에러나도 다음 클라이언트 진행
+        });
+      });
+
+      // 클라이언트 간 딜레이 (API 레이트 리밋 방지)
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    } catch (error) {
+      console.error(`❌ Error sending monthly report for ${client.client_name}:`, error.message);
+    }
+  }
+
+  console.log("\n🎉 All monthly reports sent!");
+}
 
 // 프로세스 유지
 process.on('SIGTERM', () => {

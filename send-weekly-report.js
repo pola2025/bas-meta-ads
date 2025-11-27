@@ -705,7 +705,7 @@ async function generateAndSendReport(client, dates, forceResend = false) {
 
   try {
     for (let i = 0; i < messages.length; i++) {
-      await clientBot.sendMessage(chatId, messages[i], { parse_mode: 'MarkdownV2' });
+      await clientBot.sendMessage(chatId, messages[i], { parse_mode: 'MarkdownV2', disable_web_page_preview: true });
       if (i < messages.length - 1) {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
