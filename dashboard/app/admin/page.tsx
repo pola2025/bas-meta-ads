@@ -1304,9 +1304,32 @@ export default function AdminPage() {
                         dataKey="cpl"
                         stroke="#ef4444"
                         strokeWidth={2}
-                        dot={{ r: 3, fill: '#ef4444' }}
+                        dot={(props: any) => {
+                          const { cx, cy, payload } = props;
+                          const isInefficient = monthlyFlowData.analysis.inefficientDays.includes(payload.day);
+                          return (
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={isInefficient ? 5 : 3}
+                              fill={isInefficient ? '#dc2626' : '#ef4444'}
+                              stroke={isInefficient ? '#fef2f2' : 'none'}
+                              strokeWidth={isInefficient ? 2 : 0}
+                            />
+                          );
+                        }}
                         activeDot={{ r: 5 }}
                         name="cpl"
+                        label={(props: any) => {
+                          const { x, y, payload } = props;
+                          const isInefficient = monthlyFlowData.analysis.inefficientDays.includes(payload.day);
+                          if (!isInefficient) return <text />;
+                          return (
+                            <text x={x} y={y - 12} textAnchor="middle" fontSize={14}>
+                              🚨
+                            </text>
+                          );
+                        }}
                       />
                     </ComposedChart>
                   </ResponsiveContainer>
