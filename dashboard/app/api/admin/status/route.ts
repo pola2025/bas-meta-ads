@@ -149,6 +149,7 @@ export async function GET(request: NextRequest) {
         todayRecords: todayDataCount || 0,
         yesterdayRecords: yesterdayDataCount || 0,
         recent7DaysRecords: recent7DaysCount || 0,
+        recent7DaysImpressions: recent7DaysTotals.impressions,
         missingDataClients: missingDataClients.length,
         missingList: missingDataClients.map((c) => ({
           id: c.id,
