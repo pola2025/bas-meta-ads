@@ -868,7 +868,7 @@ export default function AdminPage() {
                 </div>
 
                 {/* 요약 카드 */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mt-4">
                   <div className="bg-blue-50 rounded-lg p-4">
                     <div className="text-sm text-blue-600 font-medium">활성 클라이언트</div>
                     <div className="text-2xl font-bold text-blue-700">{systemStatus.clients.active}</div>
@@ -886,8 +886,25 @@ export default function AdminPage() {
                     </div>
                   </div>
                   <div className="bg-amber-50 rounded-lg p-4">
-                    <div className="text-sm text-amber-600 font-medium">7일 지출</div>
+                    <div className="text-sm text-amber-600 font-medium">평균 CPL</div>
                     <div className="text-2xl font-bold text-amber-700">
+                      ${systemStatus.recent7Days.cpl.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="bg-teal-50 rounded-lg p-4">
+                    <div className="text-sm text-teal-600 font-medium">평균 시청</div>
+                    <div className="text-2xl font-bold text-teal-700">
+                      {systemStatus.recent7Days.avg_watch_time
+                        ? systemStatus.recent7Days.avg_watch_time < 60
+                          ? `${systemStatus.recent7Days.avg_watch_time.toFixed(1)}s`
+                          : `${Math.floor(systemStatus.recent7Days.avg_watch_time / 60)}:${String(Math.round(systemStatus.recent7Days.avg_watch_time % 60)).padStart(2, '0')}`
+                        : '-'
+                      }
+                    </div>
+                  </div>
+                  <div className="bg-rose-50 rounded-lg p-4">
+                    <div className="text-sm text-rose-600 font-medium">7일 지출</div>
+                    <div className="text-2xl font-bold text-rose-700">
                       ${systemStatus.recent7Days.spend.toLocaleString()}
                     </div>
                   </div>
