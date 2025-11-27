@@ -45,6 +45,7 @@ interface Client {
   id: string;
   client_id: string;
   client_name: string;
+  slug: string | null;
   email: string;
   meta_ad_account_id: string | null;
   telegram_chat_id: string | null;
@@ -792,10 +793,10 @@ export default function AdminPage() {
   };
 
   // URL 복사
-  const copyDashboardUrl = (clientId: string) => {
-    const url = `${window.location.origin}/?client=${clientId}`;
+  const copyDashboardUrl = (client: Client) => {
+    const url = `${window.location.origin}/?client=${client.slug || client.id}`;
     navigator.clipboard.writeText(url);
-    setCopiedId(clientId);
+    setCopiedId(client.id);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
@@ -1074,10 +1075,10 @@ export default function AdminPage() {
                           {/* 대시보드 URL */}
                           <div className="mt-4 flex items-center gap-2">
                             <code className="text-xs bg-neutral-100 px-3 py-1.5 rounded-lg text-neutral-600 flex-1 truncate">
-                              {`${typeof window !== 'undefined' ? window.location.origin : ''}/?client=${client.id}`}
+                              {`${typeof window !== 'undefined' ? window.location.origin : ''}/?client=${client.slug || client.id}`}
                             </code>
                             <button
-                              onClick={() => copyDashboardUrl(client.id)}
+                              onClick={() => copyDashboardUrl(client)}
                               className="p-2 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors"
                               title="URL 복사"
                             >
@@ -1088,7 +1089,7 @@ export default function AdminPage() {
                               )}
                             </button>
                             <a
-                              href={`/?client=${client.id}`}
+                              href={`/?client=${client.slug || client.id}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="p-2 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors"

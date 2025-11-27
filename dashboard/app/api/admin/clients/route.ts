@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
         id,
         client_id,
         client_name,
+        slug,
         email,
         meta_ad_account_id,
         telegram_chat_id,
