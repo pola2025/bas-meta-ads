@@ -688,6 +688,7 @@ export default function AdminPage() {
       setFormData(initialFormData);
       setTokenValidation(null);
       fetchData();
+      fetchRenewalData();  // 연장관리 목록도 새로고침
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error saving client');
     } finally {
@@ -712,6 +713,7 @@ export default function AdminPage() {
       }
 
       fetchData();
+      fetchRenewalData();  // 연장관리 목록도 새로고침
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error deleting client');
     }
