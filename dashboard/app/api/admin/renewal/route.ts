@@ -32,7 +32,8 @@ export async function GET(request: NextRequest) {
     const { data: clients, error } = await supabase
       .from('clients')
       .select('id, client_name, contact_phone, contact_name, service_start_date, service_end_date, is_active, telegram_chat_id')
-      .order('service_end_date', { ascending: true, nullsFirst: false });
+      .not('service_end_date', 'is', null)  // 무제한(service_end_date가 null) 클라이언트 제외
+      .order('service_end_date', { ascending: true });
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -54,6 +55,12 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // 무제한 클라이언트 수 조회
+    const { count: unlimitedCount } = await supabase
+      .from('clients')
+      .select('*', { count: 'exact', head: true })
+      .is('service_end_date', null);
+
     // 통계
     const stats = {
       total: enrichedClients.length,
@@ -61,6 +68,7 @@ export async function GET(request: NextRequest) {
       expiringSoon: enrichedClients.filter(c => c.dday !== null && c.dday >= 0 && c.dday <= 7).length,
       expired: enrichedClients.filter(c => c.dday !== null && c.dday < 0).length,
       noContact: enrichedClients.filter(c => !c.contact_phone).length,
+      unlimited: unlimitedCount || 0,
     };
 
     return NextResponse.json({ clients: enrichedClients, stats });

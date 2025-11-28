@@ -184,6 +184,7 @@ interface RenewalStats {
   expiringSoon: number;
   expired: number;
   noContact: number;
+  unlimited: number;
 }
 
 interface RateLimitInfo {
@@ -1510,7 +1511,7 @@ export default function AdminPage() {
                   연장관리
                   {renewalStats && (
                     <span className="text-sm font-normal text-neutral-500">
-                      ({renewalStats.active}개 활성 / {renewalStats.expiringSoon}개 만료 예정 / {renewalStats.expired}개 만료)
+                      ({renewalStats.total}개 / 만료예정 {renewalStats.expiringSoon}개 / 무제한 {renewalStats.unlimited}개)
                     </span>
                   )}
                 </h2>
@@ -1536,10 +1537,10 @@ export default function AdminPage() {
                 <div className="mt-4">
                   {/* 통계 카드 */}
                   {renewalStats && (
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4">
                       <div className="bg-blue-50 rounded-lg p-3 text-center">
                         <div className="text-xl font-bold text-blue-700">{renewalStats.total}</div>
-                        <div className="text-xs text-blue-600">전체</div>
+                        <div className="text-xs text-blue-600">연장관리</div>
                       </div>
                       <div className="bg-green-50 rounded-lg p-3 text-center">
                         <div className="text-xl font-bold text-green-700">{renewalStats.active}</div>
@@ -1556,6 +1557,10 @@ export default function AdminPage() {
                       <div className="bg-neutral-100 rounded-lg p-3 text-center">
                         <div className="text-xl font-bold text-neutral-700">{renewalStats.noContact}</div>
                         <div className="text-xs text-neutral-600">연락처 미등록</div>
+                      </div>
+                      <div className="bg-indigo-50 rounded-lg p-3 text-center">
+                        <div className="text-xl font-bold text-indigo-700">{renewalStats.unlimited}</div>
+                        <div className="text-xs text-indigo-600">무제한</div>
                       </div>
                     </div>
                   )}

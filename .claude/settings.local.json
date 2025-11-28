@@ -72,7 +72,9 @@
       "Bash(node lib/backfill.js:*)",
       "Bash(SKIP_AI=true node send-weekly-report.js:*)",
       "Bash(npm run build:*)",
-      "mcp__railway-mcp-server__list-services"
+      "mcp__railway-mcp-server__list-services",
+      "Bash(node migrations/add-renewal-columns.js:*)",
+      "Bash(node renewal-manager.js:*)"
     ],
     "deny": [],
     "ask": []
