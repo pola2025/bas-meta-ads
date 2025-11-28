@@ -39,6 +39,7 @@ import {
   Send,
   CalendarCheck,
   UserCheck,
+  Info,
 } from 'lucide-react';
 import {
   ComposedChart,
@@ -136,6 +137,7 @@ interface DailyFlowData {
   cpl: number;
   ctr: number;
   avgWatchTime: number;
+  hasData: boolean; // 광고 ON 여부 (추이 그래프용)
 }
 
 interface MonthlyFlowResponse {
@@ -156,6 +158,8 @@ interface MonthlyFlowResponse {
     threshold: number;
     inefficientDays: number[];
     inefficientCount: number;
+    activeDays: number;    // 광고 운영일 수
+    inactiveDays: number;  // 광고 OFF일 수
   };
 }
 
@@ -1297,6 +1301,21 @@ export default function AdminPage() {
                 </div>
               )}
 
+              {/* 광고 OFF일 안내 */}
+              {monthlyFlowData && monthlyFlowData.analysis.inactiveDays > 0 && (
+                <div className="mb-4 px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-lg flex items-start gap-3">
+                  <Info className="w-5 h-5 text-neutral-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <div className="font-medium text-neutral-700">
+                      광고 운영: {monthlyFlowData.analysis.activeDays}일 / OFF: {monthlyFlowData.analysis.inactiveDays}일
+                    </div>
+                    <div className="text-sm text-neutral-500">
+                      광고 OFF 기간은 CPL 추이 그래프에서 제외됩니다 (통계 신뢰도 유지)
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* 효율 저하 경고 */}
               {monthlyFlowData && monthlyFlowData.analysis.inefficientCount > 0 && (
                 <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
@@ -1320,7 +1339,11 @@ export default function AdminPage() {
                 <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart
-                      data={monthlyFlowData.dailyData}
+                      data={monthlyFlowData.dailyData.map(d => ({
+                        ...d,
+                        // 광고 OFF일(hasData=false)은 CPL 라인에서 제외 (선 끊김)
+                        cplLine: d.hasData ? d.cpl : null,
+                      }))}
                       margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -1437,16 +1460,17 @@ export default function AdminPage() {
                         name="leads"
                         minPointSize={3}
                       />
-                      {/* CPL 라인 */}
+                      {/* CPL 라인 (광고 OFF일 제외) */}
                       <Line
                         yAxisId="right"
                         type="monotone"
-                        dataKey="cpl"
+                        dataKey="cplLine"
                         stroke="#ef4444"
                         strokeWidth={2}
+                        connectNulls={false}
                         dot={(props: any) => {
                           const { cx, cy, payload } = props;
-                          if (!payload?.day || !cx || !cy) return <circle cx={0} cy={0} r={0} />;
+                          if (!payload?.day || !cx || !cy || !payload.hasData) return <circle cx={0} cy={0} r={0} />;
                           const isHighCpl = payload.cpl >= 20;
                           return (
                             <g>

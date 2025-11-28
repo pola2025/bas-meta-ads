@@ -105,6 +105,7 @@ export async function GET(request: NextRequest) {
       .sort()
       .map((dateStr) => {
         const d = dailyMap[dateStr];
+        const hasData = d.spend > 0 || d.leads > 0 || d.impressions > 0; // 광고 ON 여부
         const cpl = d.leads > 0 ? d.spend / d.leads : 0;
         const ctr = d.impressions > 0 ? (d.clicks / d.impressions) * 100 : 0;
         const avgWatchTime = d.watchTimeCount > 0 ? d.watchTimeSum / d.watchTimeCount : 0;
@@ -119,6 +120,7 @@ export async function GET(request: NextRequest) {
           cpl: Math.round(cpl * 100) / 100,
           ctr: Math.round(ctr * 100) / 100,
           avgWatchTime: Math.round(avgWatchTime * 10) / 10,
+          hasData, // 광고 ON 여부 (추이 그래프용)
         };
       });
 
@@ -150,6 +152,10 @@ export async function GET(request: NextRequest) {
           : 0,
     };
 
+    // 광고 운영일/OFF일 통계
+    const activeDays = dailyData.filter(d => d.hasData).length;
+    const inactiveDays = dailyData.length - activeDays;
+
     return NextResponse.json({
       success: true,
       year,
@@ -164,6 +170,8 @@ export async function GET(request: NextRequest) {
         threshold: Math.round(threshold * 100) / 100,
         inefficientDays,
         inefficientCount: inefficientDays.length,
+        activeDays,    // 광고 운영일 수
+        inactiveDays,  // 광고 OFF일 수
       },
     });
   } catch (error: any) {
