@@ -129,10 +129,10 @@ export async function GET(request: NextRequest) {
     const totalLeads = dailyData.reduce((sum, d) => sum + d.leads, 0);
     const avgCpl = totalLeads > 0 ? totalSpend / totalLeads : 0;
 
-    // 효율 저하 구간 탐지 (평균 CPL 대비 30% 이상 높은 구간)
+    // 효율 저하 구간 탐지 (평균 CPL 대비 30% 이상 높은 구간, 광고 ON일만)
     const threshold = avgCpl * 1.3;
     const inefficientDays = dailyData
-      .filter((d) => d.leads > 0 && d.cpl > threshold)
+      .filter((d) => d.hasData && d.leads > 0 && d.cpl > threshold)
       .map((d) => d.day);
 
     // 월 합계
