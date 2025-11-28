@@ -1301,21 +1301,6 @@ export default function AdminPage() {
                 </div>
               )}
 
-              {/* 광고 OFF일 안내 */}
-              {monthlyFlowData && monthlyFlowData.analysis.inactiveDays > 0 && (
-                <div className="mb-4 px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-lg flex items-start gap-3">
-                  <Info className="w-5 h-5 text-neutral-500 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <div className="font-medium text-neutral-700">
-                      광고 운영: {monthlyFlowData.analysis.activeDays}일 / OFF: {monthlyFlowData.analysis.inactiveDays}일
-                    </div>
-                    <div className="text-sm text-neutral-500">
-                      광고 OFF 기간은 CPL 추이 그래프에서 제외됩니다 (통계 신뢰도 유지)
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* 효율 저하 경고 */}
               {monthlyFlowData && monthlyFlowData.analysis.inefficientCount > 0 && (
                 <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
