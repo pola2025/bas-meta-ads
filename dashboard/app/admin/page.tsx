@@ -35,6 +35,10 @@ import {
   Timer,
   Pause,
   BarChart3,
+  Phone,
+  Send,
+  CalendarCheck,
+  UserCheck,
 } from 'lucide-react';
 import {
   ComposedChart,
@@ -161,6 +165,27 @@ interface BackfillLog {
   message: string;
 }
 
+interface RenewalClient {
+  id: string;
+  client_name: string;
+  contact_phone: string | null;
+  contact_name: string | null;
+  service_start_date: string | null;
+  service_end_date: string | null;
+  is_active: boolean;
+  telegram_chat_id: string | null;
+  dday: number | null;
+  status: 'normal' | 'warning' | 'urgent' | 'expired' | 'unknown';
+}
+
+interface RenewalStats {
+  total: number;
+  active: number;
+  expiringSoon: number;
+  expired: number;
+  noContact: number;
+}
+
 interface RateLimitInfo {
   isActive: boolean;
   retryAt: string | null;
@@ -256,6 +281,16 @@ export default function AdminPage() {
   // 시스템 현황 펼침 상태
   const [showSystemDetails, setShowSystemDetails] = useState(false);
 
+  // 연장관리 상태
+  const [renewalClients, setRenewalClients] = useState<RenewalClient[]>([]);
+  const [renewalStats, setRenewalStats] = useState<RenewalStats | null>(null);
+  const [renewalLoading, setRenewalLoading] = useState(false);
+  const [showRenewalSection, setShowRenewalSection] = useState(true);
+  const [editingRenewal, setEditingRenewal] = useState<string | null>(null);
+  const [renewalForm, setRenewalForm] = useState({ contact_phone: '', contact_name: '' });
+  const [smsSending, setSmsSending] = useState<string | null>(null);
+  const [extending, setExtending] = useState<string | null>(null);
+
   // 관리자 키 검증
   const isValidAdmin = adminKey === process.env.NEXT_PUBLIC_ADMIN_KEY;
 
@@ -294,7 +329,108 @@ export default function AdminPage() {
 
   useEffect(() => {
     fetchData();
+    fetchRenewalData();
   }, [isValidAdmin]);
+
+  // 연장관리 데이터 로드
+  const fetchRenewalData = async () => {
+    if (!isValidAdmin) return;
+    setRenewalLoading(true);
+    try {
+      const res = await fetch('/api/admin/renewal', {
+        headers: { 'x-admin-key': adminKey || '' },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRenewalClients(data.clients || []);
+        setRenewalStats(data.stats || null);
+      }
+    } catch (err) {
+      console.error('Renewal data fetch error:', err);
+    } finally {
+      setRenewalLoading(false);
+    }
+  };
+
+  // 연락처 업데이트
+  const handleUpdateContact = async (clientId: string) => {
+    try {
+      const res = await fetch('/api/admin/renewal', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey || '',
+        },
+        body: JSON.stringify({
+          id: clientId,
+          contact_phone: renewalForm.contact_phone,
+          contact_name: renewalForm.contact_name,
+        }),
+      });
+      if (res.ok) {
+        setEditingRenewal(null);
+        fetchRenewalData();
+      }
+    } catch (err) {
+      console.error('Contact update error:', err);
+    }
+  };
+
+  // SMS 발송
+  const handleSendSMS = async (clientId: string, type: string) => {
+    if (!confirm(`${type.toUpperCase()} 안내 문자를 발송하시겠습니까?`)) return;
+
+    setSmsSending(clientId);
+    try {
+      const res = await fetch('/api/admin/renewal/sms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey || '',
+        },
+        body: JSON.stringify({ id: clientId, type }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`✅ 문자 발송 완료!\n수신: ${data.phone}`);
+      } else {
+        alert(`❌ 발송 실패: ${data.error}`);
+      }
+    } catch (err) {
+      alert('발송 중 오류가 발생했습니다.');
+    } finally {
+      setSmsSending(null);
+    }
+  };
+
+  // 서비스 연장
+  const handleExtend = async (clientId: string, months: number = 3) => {
+    if (!confirm(`${months}개월 연장하시겠습니까?`)) return;
+
+    setExtending(clientId);
+    try {
+      const res = await fetch('/api/admin/renewal/extend', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey || '',
+        },
+        body: JSON.stringify({ id: clientId, months }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`✅ 연장 완료!\n새 종료일: ${data.extension.newEndDate}`);
+        fetchRenewalData();
+        fetchData();
+      } else {
+        alert(`❌ 연장 실패: ${data.error}`);
+      }
+    } catch (err) {
+      alert('연장 처리 중 오류가 발생했습니다.');
+    } finally {
+      setExtending(null);
+    }
+  };
 
   // 월간 흐름 데이터 로드
   const fetchMonthlyFlow = async () => {
@@ -1361,6 +1497,243 @@ export default function AdminPage() {
                   <span>효율 저하 구간</span>
                 </div>
               </div>
+            </div>
+
+            {/* 연장관리 섹션 */}
+            <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-6 mt-6">
+              <div
+                className="flex items-center justify-between cursor-pointer"
+                onClick={() => setShowRenewalSection(!showRenewalSection)}
+              >
+                <h2 className="text-lg font-semibold text-neutral-800 flex items-center gap-2">
+                  <CalendarCheck className="w-5 h-5 text-orange-600" />
+                  연장관리
+                  {renewalStats && (
+                    <span className="text-sm font-normal text-neutral-500">
+                      ({renewalStats.active}개 활성 / {renewalStats.expiringSoon}개 만료 예정 / {renewalStats.expired}개 만료)
+                    </span>
+                  )}
+                </h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fetchRenewalData();
+                    }}
+                    className="p-1.5 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${renewalLoading ? 'animate-spin' : ''}`} />
+                  </button>
+                  {showRenewalSection ? (
+                    <ChevronUp className="w-5 h-5 text-neutral-400" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-neutral-400" />
+                  )}
+                </div>
+              </div>
+
+              {showRenewalSection && (
+                <div className="mt-4">
+                  {/* 통계 카드 */}
+                  {renewalStats && (
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+                      <div className="bg-blue-50 rounded-lg p-3 text-center">
+                        <div className="text-xl font-bold text-blue-700">{renewalStats.total}</div>
+                        <div className="text-xs text-blue-600">전체</div>
+                      </div>
+                      <div className="bg-green-50 rounded-lg p-3 text-center">
+                        <div className="text-xl font-bold text-green-700">{renewalStats.active}</div>
+                        <div className="text-xs text-green-600">활성</div>
+                      </div>
+                      <div className="bg-amber-50 rounded-lg p-3 text-center">
+                        <div className="text-xl font-bold text-amber-700">{renewalStats.expiringSoon}</div>
+                        <div className="text-xs text-amber-600">7일내 만료</div>
+                      </div>
+                      <div className="bg-red-50 rounded-lg p-3 text-center">
+                        <div className="text-xl font-bold text-red-700">{renewalStats.expired}</div>
+                        <div className="text-xs text-red-600">만료됨</div>
+                      </div>
+                      <div className="bg-neutral-100 rounded-lg p-3 text-center">
+                        <div className="text-xl font-bold text-neutral-700">{renewalStats.noContact}</div>
+                        <div className="text-xs text-neutral-600">연락처 미등록</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 클라이언트 목록 */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-neutral-200">
+                          <th className="text-left py-2 px-3 font-medium text-neutral-600">상태</th>
+                          <th className="text-left py-2 px-3 font-medium text-neutral-600">클라이언트</th>
+                          <th className="text-left py-2 px-3 font-medium text-neutral-600">종료일</th>
+                          <th className="text-left py-2 px-3 font-medium text-neutral-600">D-Day</th>
+                          <th className="text-left py-2 px-3 font-medium text-neutral-600">연락처</th>
+                          <th className="text-left py-2 px-3 font-medium text-neutral-600">담당자</th>
+                          <th className="text-center py-2 px-3 font-medium text-neutral-600">문자발송</th>
+                          <th className="text-center py-2 px-3 font-medium text-neutral-600">연장</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {renewalClients.map((client) => (
+                          <tr key={client.id} className="border-b border-neutral-100 hover:bg-neutral-50">
+                            {/* 상태 */}
+                            <td className="py-2 px-3">
+                              <span
+                                className={`inline-block w-3 h-3 rounded-full ${
+                                  client.status === 'expired'
+                                    ? 'bg-red-500'
+                                    : client.status === 'urgent'
+                                    ? 'bg-orange-500'
+                                    : client.status === 'warning'
+                                    ? 'bg-amber-500'
+                                    : 'bg-green-500'
+                                }`}
+                              />
+                            </td>
+                            {/* 클라이언트명 */}
+                            <td className="py-2 px-3 font-medium">{client.client_name}</td>
+                            {/* 종료일 */}
+                            <td className="py-2 px-3 text-neutral-600">
+                              {client.service_end_date || '-'}
+                            </td>
+                            {/* D-Day */}
+                            <td className="py-2 px-3">
+                              {client.dday !== null ? (
+                                <span
+                                  className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                    client.dday < 0
+                                      ? 'bg-red-100 text-red-700'
+                                      : client.dday <= 3
+                                      ? 'bg-orange-100 text-orange-700'
+                                      : client.dday <= 7
+                                      ? 'bg-amber-100 text-amber-700'
+                                      : 'bg-green-100 text-green-700'
+                                  }`}
+                                >
+                                  {client.dday === 0 ? 'D-DAY' : client.dday > 0 ? `D-${client.dday}` : `D+${Math.abs(client.dday)}`}
+                                </span>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+                            {/* 연락처 */}
+                            <td className="py-2 px-3">
+                              {editingRenewal === client.id ? (
+                                <input
+                                  type="text"
+                                  value={renewalForm.contact_phone}
+                                  onChange={(e) => setRenewalForm({ ...renewalForm, contact_phone: e.target.value })}
+                                  className="w-28 px-2 py-1 text-xs border rounded"
+                                  placeholder="010-0000-0000"
+                                />
+                              ) : (
+                                <span
+                                  className={`cursor-pointer hover:text-blue-600 ${!client.contact_phone ? 'text-neutral-400' : ''}`}
+                                  onClick={() => {
+                                    setEditingRenewal(client.id);
+                                    setRenewalForm({
+                                      contact_phone: client.contact_phone || '',
+                                      contact_name: client.contact_name || '',
+                                    });
+                                  }}
+                                >
+                                  {client.contact_phone || '등록'}
+                                </span>
+                              )}
+                            </td>
+                            {/* 담당자 */}
+                            <td className="py-2 px-3">
+                              {editingRenewal === client.id ? (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="text"
+                                    value={renewalForm.contact_name}
+                                    onChange={(e) => setRenewalForm({ ...renewalForm, contact_name: e.target.value })}
+                                    className="w-16 px-2 py-1 text-xs border rounded"
+                                    placeholder="담당자"
+                                  />
+                                  <button
+                                    onClick={() => handleUpdateContact(client.id)}
+                                    className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                  >
+                                    <Check className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingRenewal(null)}
+                                    className="p-1 text-red-600 hover:bg-red-50 rounded"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className={!client.contact_name ? 'text-neutral-400' : ''}>
+                                  {client.contact_name || '-'}
+                                </span>
+                              )}
+                            </td>
+                            {/* 문자발송 */}
+                            <td className="py-2 px-3 text-center">
+                              {client.contact_phone ? (
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    onClick={() => handleSendSMS(client.id, 'd7')}
+                                    disabled={smsSending === client.id}
+                                    className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50"
+                                    title="D-7 안내"
+                                  >
+                                    D-7
+                                  </button>
+                                  <button
+                                    onClick={() => handleSendSMS(client.id, 'd3')}
+                                    disabled={smsSending === client.id}
+                                    className="px-2 py-1 text-xs bg-amber-100 text-amber-700 rounded hover:bg-amber-200 disabled:opacity-50"
+                                    title="D-3 안내"
+                                  >
+                                    D-3
+                                  </button>
+                                  <button
+                                    onClick={() => handleSendSMS(client.id, 'd0')}
+                                    disabled={smsSending === client.id}
+                                    className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50"
+                                    title="D-0 안내"
+                                  >
+                                    D-0
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-neutral-400 text-xs">연락처 필요</span>
+                              )}
+                            </td>
+                            {/* 연장 */}
+                            <td className="py-2 px-3 text-center">
+                              <button
+                                onClick={() => handleExtend(client.id, 3)}
+                                disabled={extending === client.id}
+                                className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 flex items-center gap-1 mx-auto"
+                              >
+                                {extending === client.id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <CalendarPlus className="w-3 h-3" />
+                                )}
+                                3개월
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {renewalClients.length === 0 && !renewalLoading && (
+                    <div className="text-center py-8 text-neutral-500">
+                      클라이언트가 없습니다
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* 클라이언트 목록 */}
