@@ -29,11 +29,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // 모든 클라이언트 조회 (무제한 포함)
     const { data: clients, error } = await supabase
       .from('clients')
       .select('id, client_name, contact_phone, contact_name, service_start_date, service_end_date, is_active, telegram_chat_id')
-      .not('service_end_date', 'is', null)  // 무제한(service_end_date가 null) 클라이언트 제외
-      .order('service_end_date', { ascending: true });
+      .order('service_end_date', { ascending: true, nullsFirst: false });
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -41,9 +41,12 @@ export async function GET(request: NextRequest) {
 
     // D-day 및 상태 추가
     const enrichedClients = (clients || []).map(client => {
+      const isUnlimited = client.service_end_date === null;
       const dday = getDday(client.service_end_date);
       let status = 'normal';
-      if (dday === null) status = 'unknown';
+
+      if (isUnlimited) status = 'unlimited';
+      else if (dday === null) status = 'unknown';
       else if (dday < 0) status = 'expired';
       else if (dday <= 3) status = 'urgent';
       else if (dday <= 7) status = 'warning';
@@ -52,23 +55,21 @@ export async function GET(request: NextRequest) {
         ...client,
         dday,
         status,
+        isUnlimited,
       };
     });
 
-    // 무제한 클라이언트 수 조회
-    const { count: unlimitedCount } = await supabase
-      .from('clients')
-      .select('*', { count: 'exact', head: true })
-      .is('service_end_date', null);
-
     // 통계
+    const unlimitedClients = enrichedClients.filter(c => c.isUnlimited);
+    const limitedClients = enrichedClients.filter(c => !c.isUnlimited);
+
     const stats = {
       total: enrichedClients.length,
       active: enrichedClients.filter(c => c.is_active).length,
-      expiringSoon: enrichedClients.filter(c => c.dday !== null && c.dday >= 0 && c.dday <= 7).length,
-      expired: enrichedClients.filter(c => c.dday !== null && c.dday < 0).length,
+      expiringSoon: limitedClients.filter(c => c.dday !== null && c.dday >= 0 && c.dday <= 7).length,
+      expired: limitedClients.filter(c => c.dday !== null && c.dday < 0).length,
       noContact: enrichedClients.filter(c => !c.contact_phone).length,
-      unlimited: unlimitedCount || 0,
+      unlimited: unlimitedClients.length,
     };
 
     return NextResponse.json({ clients: enrichedClients, stats });

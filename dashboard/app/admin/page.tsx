@@ -175,7 +175,8 @@ interface RenewalClient {
   is_active: boolean;
   telegram_chat_id: string | null;
   dday: number | null;
-  status: 'normal' | 'warning' | 'urgent' | 'expired' | 'unknown';
+  status: 'normal' | 'warning' | 'urgent' | 'expired' | 'unknown' | 'unlimited';
+  isUnlimited?: boolean;
 }
 
 interface RenewalStats {
@@ -1601,11 +1602,15 @@ export default function AdminPage() {
                             <td className="py-2 px-3 font-medium">{client.client_name}</td>
                             {/* 종료일 */}
                             <td className="py-2 px-3 text-neutral-600">
-                              {client.service_end_date || '-'}
+                              {client.isUnlimited ? '무제한' : (client.service_end_date || '-')}
                             </td>
                             {/* D-Day */}
                             <td className="py-2 px-3">
-                              {client.dday !== null ? (
+                              {client.isUnlimited ? (
+                                <span className="px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-700">
+                                  ♾️ 무제한
+                                </span>
+                              ) : client.dday !== null ? (
                                 <span
                                   className={`px-2 py-0.5 rounded text-xs font-medium ${
                                     client.dday < 0

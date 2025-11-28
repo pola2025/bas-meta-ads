@@ -155,7 +155,8 @@ async function listClients() {
   const { data: clients, error } = await supabase
     .from('clients')
     .select('id, client_name, contact_phone, contact_name, service_start_date, service_end_date, is_active')
-    .order('service_end_date', { ascending: true, nullsFirst: false });
+    .not('service_end_date', 'is', null)  // 무제한(service_end_date가 null) 클라이언트 제외
+    .order('service_end_date', { ascending: true });
 
   if (error) {
     console.log(`\n❌ 조회 실패: ${error.message}`);
@@ -183,6 +184,12 @@ async function listClients() {
     console.log(`${emoji}   ${ddayStr.padEnd(8)} ${endDate.padEnd(12)} ${name} ${phone} ${contact} ${active}`);
   }
 
+  // 무제한 클라이언트 수 조회
+  const { count: unlimitedCount } = await supabase
+    .from('clients')
+    .select('*', { count: 'exact', head: true })
+    .is('service_end_date', null);
+
   // 요약
   const activeClients = clients.filter(c => c.is_active);
   const expiringSoon = activeClients.filter(c => {
@@ -196,9 +203,10 @@ async function listClients() {
 
   console.log('\n' + '-'.repeat(75));
   console.log(`\n📊 요약`);
-  console.log(`   활성 클라이언트: ${activeClients.length}개`);
+  console.log(`   연장관리 대상: ${activeClients.length}개`);
   console.log(`   🟡 7일 이내 만료 예정: ${expiringSoon.length}개`);
-  console.log(`   🔴 만료됨: ${expired.length}개\n`);
+  console.log(`   🔴 만료됨: ${expired.length}개`);
+  console.log(`   ♾️  무제한 (제외): ${unlimitedCount || 0}개\n`);
 }
 
 // 클라이언트 조회
