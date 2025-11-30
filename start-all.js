@@ -64,8 +64,8 @@ function runMonthlyReport() {
 }
 
 // 크론 스케줄 설정
-// 주간 리포트: 매주 월요일 09:00 KST (UTC 00:00)
-cron.schedule('0 0 * * 1', runWeeklyReport, {
+// 주간 리포트: 매주 월요일 09:00 KST
+cron.schedule('0 9 * * 1', runWeeklyReport, {
   timezone: 'Asia/Seoul'
 });
 
