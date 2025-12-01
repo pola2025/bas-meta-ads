@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import {
   Plus,
   Users,
@@ -1210,6 +1211,23 @@ export default function AdminPage() {
                         </ul>
                       </div>
                     )}
+
+                    {/* 알림 히스토리 링크 */}
+                    <Link
+                      href="/admin/notifications"
+                      className="block bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 rounded-lg p-4 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Bell className="w-5 h-5 text-neutral-600" />
+                          <div>
+                            <h3 className="font-medium text-neutral-800">알림 히스토리</h3>
+                            <p className="text-sm text-neutral-500">토큰 만료 및 인증 관련 알림 기록 보기</p>
+                          </div>
+                        </div>
+                        <ExternalLink className="w-4 h-4 text-neutral-400" />
+                      </div>
+                    </Link>
 
                     {/* 7일 성과 상세 */}
                     <div className="bg-neutral-50 rounded-lg p-4">
