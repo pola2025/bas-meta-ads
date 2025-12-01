@@ -5,12 +5,21 @@
  * 월간 리포트 생성 및 텔레그램 발송 (MarkdownV2 이스케이프 포함)
  *
  * 사용법:
- *   node send-monthly-report.js                          # 전월 데이터
- *   REPORT_MONTH=2025-05 node send-monthly-report.js     # 특정 월
- *   SKIP_AI=true node send-monthly-report.js             # AI 제외
+ *   node send-monthly-report.js                            # 모든 활성 클라이언트
+ *   node send-monthly-report.js --client=내일채움          # 특정 클라이언트만
+ *   node send-monthly-report.js --force                    # 중복 체크 무시 (재발송)
+ *   REPORT_MONTH=2025-11 node send-monthly-report.js       # 특정 월
+ *   DRY_RUN=true node send-monthly-report.js               # 실제 발송 없이 테스트
+ *   SKIP_AI=true node send-monthly-report.js               # AI 제외
  */
 
 require('dotenv').config();
+
+// 명령줄 인자 파싱
+const args = process.argv.slice(2);
+const clientArg = args.find(a => a.startsWith('--client='));
+const FILTER_CLIENT = clientArg ? clientArg.split('=')[1] : null;
+const FORCE_SEND = args.includes('--force');
 const { createClient } = require('@supabase/supabase-js');
 const TelegramBot = require('node-telegram-bot-api');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -377,12 +386,12 @@ function getEfficiencyLabel(leadPercent, spendPercent, threshold = 5) {
 }
 
 // 텔레그램 메시지 생성 (4개로 분할)
-function generateTelegramMessages(dates, thisStats, prevStats, weekStats, dayOfWeekStats, adPerformance, campaignPerformance, aiInsights, clientId) {
+function generateTelegramMessages(dates, thisStats, prevStats, weekStats, dayOfWeekStats, adPerformance, campaignPerformance, aiInsights, clientInfo = { name: '클라이언트', slug: '', id: '' }) {
   const messages = [];
 
   // 메시지 1: 헤더 & 월간 핵심 성과
   let msg1 = `🤖 *Polarad AI 월간 성과 리포트*\n`;
-  msg1 += `비즈액터스쿨\n`;
+  msg1 += `${escapeMd(clientInfo.name)}\n`;
   msg1 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   msg1 += `📅 리포트 기간: ${escapeMd(dates.thisMonth.replace('-', '년 '))}월\n`;
   msg1 += `📅 비교 기간: ${escapeMd(dates.prevMonth.replace('-', '년 '))}월\n\n`;
@@ -534,7 +543,7 @@ function generateTelegramMessages(dates, thisStats, prevStats, weekStats, dayOfW
   msg4 += `📊 *상세 대시보드*\n`;
   msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
   msg4 += `더 자세한 데이터는 대시보드에서 확인하세요\\.\n`;
-  const reportUrl = `${DASHBOARD_URL}/reports?client=${clientId || '79e35fc6-a817-4ccc-9d5d-9a93c1ad4515'}`;
+  const reportUrl = `${DASHBOARD_URL}/reports?client=${clientInfo.slug || clientInfo.id}`;
   msg4 += `🔗 ${escapeMd(reportUrl)}\n\n`;
   msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   msg4 += `📞 *문의하기*\n`;
@@ -553,22 +562,49 @@ function generateTelegramMessages(dates, thisStats, prevStats, weekStats, dayOfW
   return messages;
 }
 
-// 메인 실행
-async function main() {
-  console.log('📊 월간 리포트 생성 시작...\n');
+// 이번 월 리포트가 이미 발송되었는지 확인
+async function checkAlreadySent(clientId, monthStart, monthEnd) {
+  const { data, error } = await supabase
+    .from('telegram_reports')
+    .select('id, sent_at')
+    .eq('client_id', clientId)
+    .eq('week_start', monthStart)  // 테이블은 week_start/week_end 컬럼 사용
+    .eq('week_end', monthEnd)
+    .eq('report_type', 'monthly')
+    .single();
 
-  // 클라이언트 ID (환경변수 또는 기본값)
-  const clientId = process.env.CLIENT_ID || '79e35fc6-a817-4ccc-9d5d-9a93c1ad4515';
-  console.log(`👤 클라이언트 ID: ${clientId}`);
+  if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+    console.error('중복 체크 오류:', error.message);
+    return null;
+  }
 
-  // 타겟 월 결정
-  const targetMonth = process.env.REPORT_MONTH || null;
-  const dates = getMonthDates(targetMonth);
+  return data; // null이면 미발송, 있으면 이미 발송됨
+}
 
-  console.log(`📅 리포트 기간: ${dates.thisMonth} (${dates.thisMonthStart} ~ ${dates.thisMonthEnd})`);
-  console.log(`📅 비교 기간: ${dates.prevMonth} (${dates.prevMonthStart} ~ ${dates.prevMonthEnd})\n`);
+// 단일 클라이언트 월간 리포트 생성 및 발송
+async function generateAndSendReport(client, dates, forceResend = false) {
+  const clientId = client.id;
+  const clientName = client.client_name;
+  const clientSlug = client.slug;
+  const clientChatId = client.telegram_chat_id;
 
-  // 1. 데이터 조회 (클라이언트별 필터링)
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`📊 ${clientName} 월간 리포트 생성 중...`);
+  console.log(`${'='.repeat(60)}\n`);
+
+  // 0. 중복 발송 체크 (--force 옵션이 없을 때만)
+  if (!forceResend) {
+    const existingReport = await checkAlreadySent(clientId, dates.thisMonthStart, dates.thisMonthEnd);
+    if (existingReport) {
+      console.log(`⏭️ ${clientName}: 이번 월 이미 발송됨 (${existingReport.sent_at})`);
+      console.log(`   재발송하려면 --force 옵션 사용`);
+      return { client: clientName, status: 'skipped', reason: 'already_sent', sentAt: existingReport.sent_at };
+    }
+  } else {
+    console.log(`🔄 ${clientName}: 강제 재발송 모드`);
+  }
+
+  // 1. 클라이언트별 데이터 조회
   const [thisMonthData, prevMonthData] = await Promise.all([
     fetchMonthlyData(dates.thisMonthStart, dates.thisMonthEnd, clientId),
     fetchMonthlyData(dates.prevMonthStart, dates.prevMonthEnd, clientId)
@@ -579,27 +615,12 @@ async function main() {
   const prevStats = calculateMonthlySummary(prevMonthData);
 
   // 데이터 검증
-  console.log('🔍 데이터 검증 중...\n');
-
-  if (thisStats.leads === 0 || thisStats.spend === 0) {
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.error('⚠️  데이터 0건 감지!');
-    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-    console.error(`분석 기간: ${dates.thisMonthStart} ~ ${dates.thisMonthEnd}`);
-    console.error(`리드: ${thisStats.leads}건`);
-    console.error(`지출: $${thisStats.spend.toFixed(2)}\n`);
-    console.error('⚠️ 발송 중단됨 - 데이터 확인 후 다시 시도해주세요.\n');
-
-    await notifyZeroData(
-      { start: dates.thisMonthStart, end: dates.thisMonthEnd },
-      thisStats
-    );
-
-    return;
+  if (thisStats.leads === 0 && thisStats.spend === 0) {
+    console.warn(`⚠️ ${clientName}: 이번 달 데이터 없음 - 리포트 생략`);
+    return { client: clientName, status: 'skipped', reason: 'no_data' };
   }
 
-  console.log(`✅ 이번 달: ${thisStats.days}일, 리드 ${thisStats.leads}건, $${thisStats.spend.toFixed(2)}`);
-  console.log(`✅ 지난 달: ${prevStats.days}일, 리드 ${prevStats.leads}건, $${prevStats.spend.toFixed(2)}\n`);
+  console.log(`✅ ${clientName} 데이터: 리드 ${thisStats.leads}건, 지출 $${thisStats.spend.toFixed(2)}`);
 
   // 3. 주별 통계
   const weekRanges = getWeekRanges(dates.thisMonthYear, dates.thisMonthNum);
@@ -612,10 +633,17 @@ async function main() {
   const adPerformance = getAdPerformance(thisMonthData);
   const campaignPerformance = getCampaignPerformance(thisMonthData);
 
-  // 6. AI 인사이트
+  // 6. 클라이언트 정보 설정
+  const clientInfo = {
+    name: clientName,
+    slug: clientSlug,
+    id: clientId
+  };
+
+  // 7. AI 인사이트 (SKIP_AI=true로 비활성화 가능)
   let aiInsights = null;
   if (process.env.SKIP_AI !== 'true') {
-    console.log('🤖 AI 인사이트 생성 중...');
+    console.log(`🤖 ${clientName} AI 인사이트 생성 중...`);
     aiInsights = await generateAIInsights({
       dates,
       thisStats,
@@ -626,12 +654,10 @@ async function main() {
       campaignPerformance
     });
   } else {
-    console.log('⏭️  AI 인사이트 생략 (SKIP_AI=true)');
     aiInsights = '📊 AI 인사이트가 비활성화되었습니다.';
   }
 
-  // 7. 텔레그램 메시지 생성
-  console.log('📝 텔레그램 메시지 생성 중...\n');
+  // 8. 텔레그램 메시지 생성
   const messages = generateTelegramMessages(
     dates,
     thisStats,
@@ -641,22 +667,72 @@ async function main() {
     adPerformance,
     campaignPerformance,
     aiInsights,
-    clientId
+    clientInfo
   );
 
-  // 8. 텔레그램 발송
-  const chatId = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHANNEL_ID;
+  // 9. 텔레그램 발송 (클라이언트별 chat_id 사용)
+  const chatId = clientChatId || process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_ADMIN_CHAT_ID;
+
   if (!chatId) {
-    console.error('❌ TELEGRAM_CHAT_ID가 설정되지 않았습니다.');
-    return;
+    console.warn(`⚠️ ${clientName}: telegram_chat_id 미설정 - 발송 생략`);
+    return { client: clientName, status: 'skipped', reason: 'no_chat_id' };
   }
 
-  console.log(`📤 텔레그램 발송 중... (Chat ID: ${chatId})\n`);
+  // 텔레그램 발송 ON/OFF 확인
+  if (client.telegram_enabled === false) {
+    console.log(`⏭️ ${clientName}: 텔레그램 발송 비활성화 - 발송 생략`);
+    return { client: clientName, status: 'skipped', reason: 'telegram_disabled' };
+  }
+
+  // DRY_RUN 모드: 실제 발송 없이 테스트
+  if (process.env.DRY_RUN === 'true') {
+    console.log(`🧪 ${clientName} DRY_RUN 모드 - 발송 생략 (Chat ID: ${chatId})`);
+
+    // 메시지 미리보기 출력
+    console.log(`\n${'━'.repeat(60)}`);
+    console.log(`📝 ${clientName} 월간 리포트 미리보기`);
+    console.log(`${'━'.repeat(60)}`);
+    messages.forEach((msg, idx) => {
+      const cleanMsg = msg.replace(/\\([_*[\]()~`>#+\-=|{}.!])/g, '$1');
+      console.log(`\n--- 메시지 ${idx + 1}/${messages.length} ---\n`);
+      console.log(cleanMsg);
+    });
+    console.log(`\n${'━'.repeat(60)}\n`);
+
+    // DB 저장은 DRY_RUN에서도 수행
+    try {
+      await saveMonthlyReport({
+        clientId,
+        monthStart: dates.thisMonthStart,
+        monthEnd: dates.thisMonthEnd,
+        messages,
+        thisStats,
+        prevStats,
+        aiInsights,
+        weeklyStats: weekStats,
+        dayOfWeekStats,
+        adPerformance,
+        campaignPerformance
+      });
+      console.log(`✅ ${clientName} 리포트 DB 저장 완료`);
+    } catch (saveError) {
+      console.error(`⚠️ ${clientName} 리포트 저장 실패:`, saveError.message);
+    }
+
+    return { client: clientName, status: 'dry_run', chatId };
+  }
+
+  // 클라이언트별 봇 토큰 (내일채움만 예외 - 환경변수 사용)
+  const clientBot = clientName === '내일채움' && process.env.NAEILCHAEUM_BOT_TOKEN
+    ? new TelegramBot(process.env.NAEILCHAEUM_BOT_TOKEN)
+    : bot;
+
+  console.log(`📤 ${clientName} 텔레그램 발송 중... (Chat ID: ${chatId})`);
 
   try {
     for (let i = 0; i < messages.length; i++) {
       console.log(`메시지 ${i + 1}/${messages.length} 발송 중...`);
-      await bot.sendMessage(chatId, messages[i], {
+      await clientBot.sendMessage(chatId, messages[i], {
         parse_mode: 'MarkdownV2',
         disable_web_page_preview: true
       });
@@ -666,32 +742,157 @@ async function main() {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
+    console.log(`✅ ${clientName} 월간 리포트 발송 완료!`);
 
-    console.log('\n✅ 월간 리포트 발송 완료!\n');
-
-    // 9. DB에 리포트 저장 (구조화된 데이터 포함)
-    console.log('💾 리포트 저장 중...');
+    // 10. DB에 리포트 저장
     try {
       await saveMonthlyReport({
+        clientId,
         monthStart: dates.thisMonthStart,
         monthEnd: dates.thisMonthEnd,
         messages,
         thisStats,
         prevStats,
         aiInsights,
-        // 구조화된 데이터
         weeklyStats: weekStats,
         dayOfWeekStats,
         adPerformance,
         campaignPerformance
       });
     } catch (saveError) {
-      console.error('⚠️ 리포트 저장 실패 (발송은 완료됨):', saveError.message);
+      console.error(`⚠️ ${clientName} 리포트 저장 실패:`, saveError.message);
     }
+
+    return { client: clientName, status: 'sent', chatId };
+
   } catch (error) {
-    console.error('❌ 텔레그램 발송 실패:', error.message);
-    throw error;
+    console.error(`❌ ${clientName} 텔레그램 발송 실패:`, error.message);
+    return { client: clientName, status: 'failed', error: error.message };
   }
+}
+
+// 메인 실행 (멀티클라이언트 지원)
+async function main() {
+  console.log('📊 월간 리포트 생성 시작...\n');
+
+  // 명령줄 옵션 표시
+  if (FILTER_CLIENT) {
+    console.log(`🎯 대상 클라이언트: ${FILTER_CLIENT}`);
+  }
+  if (FORCE_SEND) {
+    console.log(`🔄 강제 재발송 모드 활성화`);
+  }
+  if (process.env.DRY_RUN === 'true') {
+    console.log(`🧪 DRY_RUN 모드: 실제 발송 없음`);
+  }
+  console.log();
+
+  // 타겟 월 결정
+  const targetMonth = process.env.REPORT_MONTH || null;
+  const dates = getMonthDates(targetMonth);
+
+  console.log(`📅 리포트 기간: ${dates.thisMonth} (${dates.thisMonthStart} ~ ${dates.thisMonthEnd})`);
+  console.log(`📅 비교 기간: ${dates.prevMonth} (${dates.prevMonthStart} ~ ${dates.prevMonthEnd})\n`);
+
+  // 1. 클라이언트 조회 (필터 적용)
+  let query = supabase
+    .from('clients')
+    .select('id, client_name, slug, telegram_chat_id, telegram_enabled')
+    .eq('is_active', true);
+
+  // --client 옵션으로 특정 클라이언트만 필터
+  if (FILTER_CLIENT) {
+    query = query.eq('client_name', FILTER_CLIENT);
+  }
+
+  const { data: clients, error } = await query.order('client_name');
+
+  if (error) {
+    console.error('❌ 클라이언트 조회 오류:', error.message);
+    return;
+  }
+
+  if (!clients || clients.length === 0) {
+    if (FILTER_CLIENT) {
+      console.error(`❌ 클라이언트를 찾을 수 없습니다: ${FILTER_CLIENT}`);
+    } else {
+      console.error('❌ 활성 클라이언트가 없습니다.');
+    }
+    return;
+  }
+
+  console.log(`👥 대상 클라이언트: ${clients.length}개`);
+
+  // slug가 없는 클라이언트에 자동 생성
+  for (const c of clients) {
+    if (!c.slug) {
+      const crypto = require('crypto');
+      const base = c.client_name
+        .toLowerCase()
+        .replace(/[가-힣]+/g, match => {
+          const cho = ['g','kk','n','d','tt','r','m','b','pp','s','ss','','j','jj','ch','k','t','p','h'];
+          return match.split('').map(char => {
+            const code = char.charCodeAt(0) - 44032;
+            if (code < 0 || code > 11171) return '';
+            return cho[Math.floor(code / 588)] || '';
+          }).join('');
+        })
+        .replace(/[^a-z0-9]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .substring(0, 20);
+      const random = crypto.randomBytes(3).toString('hex');
+      c.slug = `${base}-${random}`;
+
+      // DB 업데이트
+      await supabase.from('clients').update({ slug: c.slug }).eq('id', c.id);
+      console.log(`   ⚙️ ${c.client_name}: slug 자동 생성 → ${c.slug}`);
+    }
+
+    const chatStatus = c.telegram_chat_id ? '✅' : '❌';
+    const enabledStatus = c.telegram_enabled !== false ? '🔔' : '🔕';
+    console.log(`   ${chatStatus} ${enabledStatus} ${c.client_name}`);
+  }
+
+  // 2. 각 클라이언트별 리포트 생성 및 발송
+  const results = [];
+  for (let i = 0; i < clients.length; i++) {
+    const client = clients[i];
+    try {
+      const result = await generateAndSendReport(client, dates, FORCE_SEND);
+      results.push(result);
+    } catch (err) {
+      console.error(`❌ ${client.client_name} 처리 중 오류:`, err.message);
+      results.push({ client: client.client_name, status: 'error', error: err.message });
+    }
+
+    // Gemini API rate limit 방지: 클라이언트 간 3초 딜레이
+    if (i < clients.length - 1) {
+      console.log(`⏳ 다음 클라이언트 대기 (3초)...`);
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+  }
+
+  // 3. 최종 결과 요약
+  console.log(`\n${'='.repeat(60)}`);
+  console.log('📊 월간 리포트 발송 결과');
+  console.log(`${'='.repeat(60)}\n`);
+
+  const sent = results.filter(r => r.status === 'sent').length;
+  const skipped = results.filter(r => r.status === 'skipped').length;
+  const failed = results.filter(r => r.status === 'failed' || r.status === 'error').length;
+
+  console.log(`✅ 발송 완료: ${sent}개`);
+  console.log(`⏭️ 생략: ${skipped}개`);
+  console.log(`❌ 실패: ${failed}개`);
+
+  results.forEach(r => {
+    const icon = r.status === 'sent' ? '✅' : r.status === 'skipped' ? '⏭️' : '❌';
+    const detail = r.reason || r.error || r.chatId || '';
+    console.log(`   ${icon} ${r.client}: ${r.status} ${detail ? `(${detail})` : ''}`);
+  });
+
+  console.log(`\n${'='.repeat(60)}\n`);
 }
 
 // 실행

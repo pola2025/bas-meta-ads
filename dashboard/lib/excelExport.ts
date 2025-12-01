@@ -18,7 +18,7 @@ export function exportToExcel(data: ExportData, filename: string = 'bas-meta-ads
 
   // 1. KPI 요약 시트
   const kpiData = [
-    ['BAS Meta Ads Dashboard - KPI 요약'],
+    ['Polarad Meta 광고리포트 - KPI 요약'],
     ['기간', `${data.dateRange.start} ~ ${data.dateRange.end}`],
     [],
     ['지표', '값'],

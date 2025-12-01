@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BAS Meta Ads Dashboard",
+  title: "Polarad Meta 광고리포트 시스템",
   description: "Meta 광고 성과 분석 대시보드",
   robots: {
     index: false,
