@@ -837,13 +837,20 @@ async function main() {
 
   // 2. 각 클라이언트별 리포트 생성 및 발송
   const results = [];
-  for (const client of clients) {
+  for (let i = 0; i < clients.length; i++) {
+    const client = clients[i];
     try {
       const result = await generateAndSendReport(client, dates, FORCE_SEND);
       results.push(result);
     } catch (err) {
       console.error(`❌ ${client.client_name} 처리 중 오류:`, err.message);
       results.push({ client: client.client_name, status: 'error', error: err.message });
+    }
+
+    // Gemini API rate limit 방지: 클라이언트 간 3초 딜레이
+    if (i < clients.length - 1) {
+      console.log(`⏳ 다음 클라이언트 대기 (3초)...`);
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
   }
 
