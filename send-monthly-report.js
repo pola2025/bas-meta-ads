@@ -25,6 +25,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { notifyZeroData, sendAdminError } = require('./lib/telegram-notifier');
 const { saveMonthlyReport } = require('./lib/report-storage');
+const { validateBeforeReport } = require('./lib/data-integrity');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -602,6 +603,18 @@ async function generateAndSendReport(client, dates, forceResend = false) {
     }
   } else {
     console.log(`🔄 ${clientName}: 강제 재발송 모드`);
+  }
+
+  // 0.5. 데이터 정합성 검증 (P1-3)
+  if (process.env.SKIP_VALIDATION !== 'true') {
+    const validation = await validateBeforeReport(clientId, dates.thisMonthStart, dates.thisMonthEnd);
+    if (!validation.passed) {
+      console.warn(`⚠️ ${clientName}: 데이터 검증 실패 - ${validation.errors.join(', ')}`);
+      if (process.env.STRICT_VALIDATION === 'true') {
+        return { client: clientName, status: 'skipped', reason: 'validation_failed', errors: validation.errors };
+      }
+      // STRICT_VALIDATION이 아니면 경고만 출력하고 계속 진행
+    }
   }
 
   // 1. 클라이언트별 데이터 조회
