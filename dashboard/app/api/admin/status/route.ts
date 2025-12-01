@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     // 1. 클라이언트 현황
     const { data: clients, error: clientsError } = await supabaseAdmin
       .from('clients')
-      .select('id, client_name, is_active, telegram_chat_id, service_end_date');
+      .select('id, client_name, is_active, telegram_chat_id, service_end_date, auth_status, token_expires_at');
 
     if (clientsError) {
       throw clientsError;
@@ -44,6 +44,23 @@ export async function GET(request: NextRequest) {
         const endDate = new Date(c.service_end_date);
         return endDate <= sevenDaysLater && endDate >= now;
       }) || [];
+
+    // auth_required 또는 token_expired 상태 클라이언트 ⭐ NEW
+    const authRequiredClients = clients?.filter((c) =>
+      c.is_active && (c.auth_status === 'auth_required' || c.auth_status === 'token_expired')
+    ) || [];
+
+    // 토큰 만료 예정 클라이언트 (7일 이내) ⭐ NEW
+    const tokenExpiringClients = clients?.filter((c) => {
+      if (!c.token_expires_at || !c.is_active) return false;
+      if (c.auth_status === 'auth_required' || c.auth_status === 'token_expired') return false;
+      const expiresAt = new Date(c.token_expires_at);
+      return expiresAt <= sevenDaysLater && expiresAt >= now;
+    }).map((c) => {
+      const expiresAt = new Date(c.token_expires_at!);
+      const daysLeft = Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      return { ...c, daysLeft };
+    }).sort((a, b) => a.daysLeft - b.daysLeft) || [];
 
     // 2. 오늘 수집 데이터
     const today = new Date().toISOString().split('T')[0];
@@ -141,6 +158,21 @@ export async function GET(request: NextRequest) {
           id: c.id,
           name: c.client_name,
           endDate: c.service_end_date,
+        })),
+        // ⭐ NEW: 인증 필요 클라이언트
+        authRequired: authRequiredClients.length,
+        authRequiredList: authRequiredClients.map((c) => ({
+          id: c.id,
+          name: c.client_name,
+          status: c.auth_status,
+        })),
+        // ⭐ NEW: 토큰 만료 예정 클라이언트
+        tokenExpiring: tokenExpiringClients.length,
+        tokenExpiringList: tokenExpiringClients.map((c) => ({
+          id: c.id,
+          name: c.client_name,
+          expiresAt: c.token_expires_at,
+          daysLeft: c.daysLeft,
         })),
       },
 

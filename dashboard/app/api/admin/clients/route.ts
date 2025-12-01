@@ -79,6 +79,7 @@ export async function GET(request: NextRequest) {
         plan_type,
         is_active,
         auth_status,
+        token_expires_at,
         service_start_date,
         service_end_date,
         telegram_enabled,

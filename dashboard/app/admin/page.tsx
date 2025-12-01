@@ -72,6 +72,7 @@ interface Client {
   plan_type: string;
   is_active: boolean;
   auth_status: string;
+  token_expires_at: string | null;
   service_start_date: string | null;
   service_end_date: string | null;
   telegram_enabled: boolean;
@@ -90,6 +91,10 @@ interface SystemStatus {
     withTelegram: number;
     expiringSoon: number;
     expiringList: Array<{ id: string; name: string; endDate: string }>;
+    authRequired: number;
+    authRequiredList: Array<{ id: string; name: string; status: string }>;
+    tokenExpiring: number;
+    tokenExpiringList: Array<{ id: string; name: string; expiresAt: string; daysLeft: number }>;
   };
   dataCollection: {
     todayRecords: number;
@@ -1138,7 +1143,57 @@ export default function AdminPage() {
                 {/* 상세 정보 */}
                 {showSystemDetails && (
                   <div className="mt-6 space-y-4">
-                    {/* 경고 */}
+                    {/* 🚨 긴급 경고: 인증 필요 */}
+                    {systemStatus.clients.authRequired > 0 && (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <h3 className="font-semibold text-red-800 flex items-center gap-2 mb-2">
+                          <AlertTriangle className="w-5 h-5" />
+                          🚨 즉시 조치 필요
+                        </h3>
+                        <ul className="text-sm text-red-700 space-y-1">
+                          {systemStatus.clients.authRequiredList.map((c) => (
+                            <li key={c.id}>
+                              • <span className="font-medium">{c.name}</span>: Meta 재인증 필요
+                              <span className="ml-2 px-2 py-0.5 bg-red-200 text-red-800 rounded text-xs">
+                                {c.status === 'token_expired' ? '토큰 만료' : '재인증 필요'}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-2 text-xs text-red-600">
+                          ℹ️ 대시보드에서 해당 클라이언트의 Meta 연동을 다시 진행해주세요.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* ⚠️ 토큰 만료 예정 경고 */}
+                    {systemStatus.clients.tokenExpiring > 0 && (
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                        <h3 className="font-semibold text-orange-800 flex items-center gap-2 mb-2">
+                          <Timer className="w-5 h-5" />
+                          ⚠️ 토큰 만료 예정
+                        </h3>
+                        <ul className="text-sm text-orange-700 space-y-1">
+                          {systemStatus.clients.tokenExpiringList.map((c) => (
+                            <li key={c.id}>
+                              • <span className="font-medium">{c.name}</span>:
+                              <span className={`ml-2 px-2 py-0.5 rounded text-xs ${
+                                c.daysLeft <= 1 ? 'bg-red-200 text-red-800' :
+                                c.daysLeft <= 3 ? 'bg-orange-200 text-orange-800' :
+                                'bg-amber-200 text-amber-800'
+                              }`}>
+                                {c.daysLeft}일 남음
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-2 text-xs text-orange-600">
+                          ℹ️ Worker가 만료 1시간 전 자동 갱신을 시도합니다. 갱신 실패 시 재인증이 필요합니다.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* 일반 경고 */}
                     {(systemStatus.clients.expiringSoon > 0 || systemStatus.dataCollection.missingDataClients > 0) && (
                       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                         <h3 className="font-semibold text-amber-800 flex items-center gap-2 mb-2">
