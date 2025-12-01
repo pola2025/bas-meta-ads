@@ -63,7 +63,34 @@ function runMonthlyReport() {
   });
 }
 
+// 일일 데이터 수집 실행 함수
+function runDataCollection() {
+  console.log(`\n⏰ [${new Date().toISOString()}] 일일 데이터 수집 시작...`);
+
+  const child = spawn('node', ['collect-all-clients.js'], {
+    stdio: 'inherit',
+    env: { ...process.env, DATA_DAYS: '7' }
+  });
+
+  child.on('error', (error) => {
+    console.error('❌ 데이터 수집 실행 오류:', error.message);
+  });
+
+  child.on('exit', (code) => {
+    if (code === 0) {
+      console.log(`✅ [${new Date().toISOString()}] 데이터 수집 완료`);
+    } else {
+      console.error(`❌ [${new Date().toISOString()}] 데이터 수집 실패 (code: ${code})`);
+    }
+  });
+}
+
 // 크론 스케줄 설정
+// 일일 데이터 수집: 매일 03:00 KST
+cron.schedule('0 3 * * *', runDataCollection, {
+  timezone: 'Asia/Seoul'
+});
+
 // 주간 리포트: 매주 월요일 09:00 KST
 cron.schedule('0 9 * * 1', runWeeklyReport, {
   timezone: 'Asia/Seoul'
@@ -75,6 +102,7 @@ cron.schedule('0 9 1 * *', runMonthlyReport, {
 });
 
 console.log('✅ Cron jobs scheduled:');
+console.log('   📊 Daily:   Every day at 03:00 KST (data collection)');
 console.log('   📅 Weekly:  Every Monday at 09:00 KST');
 console.log('   📅 Monthly: 1st of every month at 09:00 KST');
 console.log('');
@@ -86,6 +114,9 @@ if (process.env.RUN_NOW === 'weekly') {
 } else if (process.env.RUN_NOW === 'monthly') {
   console.log('🔄 RUN_NOW=monthly - 즉시 월간 리포트 실행');
   runMonthlyReport();
+} else if (process.env.RUN_NOW === 'collect') {
+  console.log('🔄 RUN_NOW=collect - 즉시 데이터 수집 실행');
+  runDataCollection();
 }
 
 // 프로세스 유지
