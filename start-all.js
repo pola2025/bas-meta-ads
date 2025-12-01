@@ -107,16 +107,17 @@ console.log('   📅 Weekly:  Every Monday at 09:00 KST');
 console.log('   📅 Monthly: 1st of every month at 09:00 KST');
 console.log('');
 
-// 시작 시 즉시 실행 옵션 (테스트용)
-if (process.env.RUN_NOW === 'weekly') {
+// Railway cron 서비스로 실행될 때 즉시 데이터 수집 실행
+// (Railway cronSchedule이 트리거하면 서비스 시작 → 즉시 수집 → 종료)
+if (process.env.CRON_TRIGGER === 'collect' || process.env.RUN_NOW === 'collect') {
+  console.log('🔄 CRON_TRIGGER=collect - 즉시 데이터 수집 실행');
+  runDataCollection();
+} else if (process.env.RUN_NOW === 'weekly') {
   console.log('🔄 RUN_NOW=weekly - 즉시 주간 리포트 실행');
   runWeeklyReport();
 } else if (process.env.RUN_NOW === 'monthly') {
   console.log('🔄 RUN_NOW=monthly - 즉시 월간 리포트 실행');
   runMonthlyReport();
-} else if (process.env.RUN_NOW === 'collect') {
-  console.log('🔄 RUN_NOW=collect - 즉시 데이터 수집 실행');
-  runDataCollection();
 }
 
 // 프로세스 유지
