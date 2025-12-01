@@ -7,6 +7,7 @@
  * - raw_data 테이블에 저장 (VIEW가 자동 집계)
  * - Redis 없이 직접 실행
  * - 클라이언트별 암호화 토큰 복호화 지원
+ * - 자동 재시도 (Rate limit 시 30초 후 최대 3회)
  *
  * 사용법:
  *   node collect-all-clients.js              # 기본 7일 (어제까지)
@@ -115,9 +116,12 @@ function getActionValue(actions, actionType) {
 }
 
 /**
- * Meta API 호출 (페이지네이션 지원)
+ * Meta API 호출 (페이지네이션 + 자동 재시도 지원)
  */
-async function fetchMetaInsights(adAccountId, accessToken, startDate, endDate) {
+async function fetchMetaInsights(adAccountId, accessToken, startDate, endDate, retryCount = 0) {
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 30000; // 30초
+
   const baseUrl = `https://graph.facebook.com/v22.0/${adAccountId}/insights`;
 
   const params = new URLSearchParams({
@@ -133,27 +137,45 @@ async function fetchMetaInsights(adAccountId, accessToken, startDate, endDate) {
   let allData = [];
   let nextUrl = `${baseUrl}?${params}`;
 
-  while (nextUrl) {
-    const response = await fetch(nextUrl);
-    const data = await response.json();
+  try {
+    while (nextUrl) {
+      const response = await fetch(nextUrl);
+      const data = await response.json();
 
-    if (data.error) {
-      throw new Error(`Meta API Error: ${data.error.message}`);
+      if (data.error) {
+        // Rate limit 에러면 재시도
+        if (data.error.code === 17 || data.error.message.includes('limit')) {
+          if (retryCount < MAX_RETRIES) {
+            console.log(`    ⏳ Rate limit - ${RETRY_DELAY/1000}초 후 재시도 (${retryCount + 1}/${MAX_RETRIES})`);
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+            return fetchMetaInsights(adAccountId, accessToken, startDate, endDate, retryCount + 1);
+          }
+        }
+        throw new Error(`Meta API Error: ${data.error.message}`);
+      }
+
+      if (data.data && data.data.length > 0) {
+        allData = allData.concat(data.data);
+      }
+
+      nextUrl = data.paging?.next || null;
+
+      // Rate limit 방지
+      if (nextUrl) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     }
 
-    if (data.data && data.data.length > 0) {
-      allData = allData.concat(data.data);
+    return allData;
+  } catch (error) {
+    // 네트워크 에러 등도 재시도
+    if (retryCount < MAX_RETRIES && !error.message.includes('Meta API Error')) {
+      console.log(`    ⏳ 네트워크 오류 - ${RETRY_DELAY/1000}초 후 재시도 (${retryCount + 1}/${MAX_RETRIES})`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      return fetchMetaInsights(adAccountId, accessToken, startDate, endDate, retryCount + 1);
     }
-
-    nextUrl = data.paging?.next || null;
-
-    // Rate limit 방지
-    if (nextUrl) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
+    throw error;
   }
-
-  return allData;
 }
 
 /**
@@ -201,7 +223,7 @@ async function saveToRawData(clientId, insights) {
 /**
  * 텔레그램 알림 (백필 채널만!)
  */
-async function sendTelegramNotification(message) {
+async function sendTelegramNotification(message, isError = false) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   if (!botToken) return;
 
@@ -243,6 +265,7 @@ async function main() {
 
   if (clientError) {
     console.error('❌ 클라이언트 조회 실패:', clientError.message);
+    await sendTelegramNotification(`🚨 **[BAS] 데이터 수집 실패**\n\n❌ 클라이언트 조회 오류: ${clientError.message}`, true);
     process.exit(1);
   }
 
@@ -255,7 +278,7 @@ async function main() {
     skipped: []
   };
 
-  // 2. 각 클라이언트 처리
+  // 2. 각 클라이언트 처리 (3초 딜레이로 Rate limit 방지)
   for (let i = 0; i < clients.length; i++) {
     const client = clients[i];
     const progress = `[${i + 1}/${clients.length}]`;
@@ -278,7 +301,7 @@ async function main() {
     }
 
     try {
-      // Meta API 호출
+      // Meta API 호출 (자동 재시도 포함)
       console.log(`    📡 Meta API 호출 중...`);
       const insights = await fetchMetaInsights(
         client.meta_ad_account_id,
@@ -309,9 +332,9 @@ async function main() {
       results.failed.push({ name: client.client_name, error: error.message });
     }
 
-    // Rate limit 방지 (클라이언트 간 1초 대기)
+    // Rate limit 방지 (클라이언트 간 3초 대기)
     if (i < clients.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
   }
 
@@ -334,8 +357,12 @@ async function main() {
     results.failed.forEach(f => console.log(`   - ${f.name}: ${f.error}`));
   }
 
-  // 4. 텔레그램 알림 (백필 채널)
-  let telegramMsg = `📊 **[BAS] 일일 데이터 수집 완료**\n\n`;
+  // 4. 텔레그램 알림 (실패 시 강조)
+  const hasFailures = results.failed.length > 0;
+  let telegramMsg = hasFailures
+    ? `🚨 **[BAS] 데이터 수집 일부 실패**\n\n`
+    : `✅ **[BAS] 일일 데이터 수집 완료**\n\n`;
+
   telegramMsg += `📅 기간: ${dateRange.since} ~ ${dateRange.until}\n`;
   telegramMsg += `✅ 성공: ${results.success.length}개\n`;
   telegramMsg += `❌ 실패: ${results.failed.length}개\n`;
@@ -348,15 +375,15 @@ async function main() {
   }
 
   if (results.failed.length > 0) {
-    telegramMsg += `\n⚠️ 실패:\n`;
+    telegramMsg += `\n⚠️ *실패 클라이언트 (확인 필요):*\n`;
     results.failed.forEach(f => {
-      telegramMsg += `- ${f.name}\n`;
+      telegramMsg += `• ${f.name}: ${f.error.substring(0, 50)}\n`;
     });
   }
 
   telegramMsg += `\n---\n🤖 BAS Meta Ads`;
 
-  await sendTelegramNotification(telegramMsg);
+  await sendTelegramNotification(telegramMsg, hasFailures);
 
   console.log('\n✅ 데이터 수집 완료!');
   console.log('━'.repeat(60));
@@ -368,5 +395,6 @@ async function main() {
 // 실행
 main().catch(error => {
   console.error('💥 치명적 오류:', error.message);
+  sendTelegramNotification(`🚨 **[BAS] 데이터 수집 치명적 오류**\n\n❌ ${error.message}`, true);
   process.exit(1);
 });
