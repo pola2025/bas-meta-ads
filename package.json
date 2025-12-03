@@ -7,7 +7,7 @@
     "producer": "MODE=producer node index.js",
     "worker": "MODE=worker node index.js",
     "test": "node test.js",
-    "start": "node index.js"
+    "start": "node start-all.js"
   },
   "keywords": [
     "meta-ads",
