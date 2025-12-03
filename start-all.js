@@ -108,9 +108,17 @@ console.log('   📅 Monthly: 1st of every month at 09:00 KST');
 console.log('');
 
 // Railway cron 서비스로 실행될 때 즉시 데이터 수집 실행
-// (Railway cronSchedule이 트리거하면 서비스 시작 → 즉시 수집 → 종료)
-if (process.env.CRON_TRIGGER === 'collect' || process.env.RUN_NOW === 'collect') {
-  console.log('🔄 CRON_TRIGGER=collect - 즉시 데이터 수집 실행');
+// 서비스 이름으로 자동 감지 (RAILWAY_SERVICE_NAME 환경변수)
+const serviceName = process.env.RAILWAY_SERVICE_NAME || '';
+const isCronCollector = serviceName.includes('cron-collector') ||
+                        process.env.CRON_TRIGGER === 'collect' ||
+                        process.env.RUN_NOW === 'collect';
+
+console.log(`🔍 Service: ${serviceName || 'local'}`);
+console.log(`🔍 CRON_TRIGGER: ${process.env.CRON_TRIGGER || 'not set'}`);
+
+if (isCronCollector) {
+  console.log('🔄 데이터 수집 서비스 감지 - 즉시 데이터 수집 실행');
   runDataCollection();
 } else if (process.env.RUN_NOW === 'weekly') {
   console.log('🔄 RUN_NOW=weekly - 즉시 주간 리포트 실행');
