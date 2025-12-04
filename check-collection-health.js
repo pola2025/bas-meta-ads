@@ -108,9 +108,9 @@ async function checkCollectionHealth() {
 📉 수집된 클라이언트: 0개
 
 ⚠️ **즉시 확인 필요:**
-1. Railway cron-collector 서비스 상태 확인
-2. 환경변수 (TOKEN_ENCRYPTION_KEY 등) 확인
-3. 수동 수집 실행: \`node collect-all-clients.js\`
+1. GitHub Actions 워크플로우 상태 확인
+2. GitHub Secrets 환경변수 확인
+3. 수동 실행: Actions → Daily Data Collection → Run workflow
 
 ---
 🤖 BAS Meta Ads 헬스체크`;
