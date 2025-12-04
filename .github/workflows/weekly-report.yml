@@ -1,0 +1,56 @@
+name: Weekly Report
+
+on:
+  schedule:
+    # 매주 월요일 오전 9시 KST (UTC 00:00)
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+    inputs:
+      client:
+        description: 'Specific client name (optional)'
+        required: false
+      force:
+        description: 'Force resend (true/false)'
+        required: false
+        default: 'false'
+      dry_run:
+        description: 'Dry run mode (true/false)'
+        required: false
+        default: 'false'
+
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Send weekly report
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ADMIN_CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TOKEN_ENCRYPTION_KEY: ${{ secrets.TOKEN_ENCRYPTION_KEY }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.client }}" ]; then
+            ARGS="$ARGS --client=${{ github.event.inputs.client }}"
+          fi
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            ARGS="$ARGS --force"
+          fi
+          node send-weekly-report.js $ARGS
