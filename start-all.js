@@ -1,20 +1,19 @@
 #!/usr/bin/env node
 
 /**
- * Railway 통합 시작 스크립트
- * 주간/월간 리포트 크론 스케줄러
+ * Railway 리포트 스케줄러
  *
  * - 주간 리포트: 매주 월요일 09:00 KST
  * - 월간 리포트: 매월 1일 09:00 KST
- * - 일일 수집: bas-meta-cron-collector 서비스 (별도)
- * - 백필: /api/backfill API (별도)
+ *
+ * 데이터 수집은 bas-meta-cron-collector 서비스에서 전담
  */
 
 require('dotenv').config();
 const cron = require('node-cron');
 const { spawn } = require('child_process');
 
-console.log('🚀 BAS Meta Ads Analytics - Report Scheduler');
+console.log('🚀 BAS Meta Ads - Report Scheduler');
 console.log(`📅 Started at: ${new Date().toISOString()}`);
 console.log(`🔧 DRY_RUN: ${process.env.DRY_RUN === 'true' ? 'ON (발송 안함)' : 'OFF (실제 발송)'}`);
 console.log('');
@@ -63,34 +62,7 @@ function runMonthlyReport() {
   });
 }
 
-// 일일 데이터 수집 실행 함수
-function runDataCollection() {
-  console.log(`\n⏰ [${new Date().toISOString()}] 일일 데이터 수집 시작...`);
-
-  const child = spawn('node', ['collect-all-clients.js'], {
-    stdio: 'inherit',
-    env: { ...process.env, DATA_DAYS: '7' }
-  });
-
-  child.on('error', (error) => {
-    console.error('❌ 데이터 수집 실행 오류:', error.message);
-  });
-
-  child.on('exit', (code) => {
-    if (code === 0) {
-      console.log(`✅ [${new Date().toISOString()}] 데이터 수집 완료`);
-    } else {
-      console.error(`❌ [${new Date().toISOString()}] 데이터 수집 실패 (code: ${code})`);
-    }
-  });
-}
-
 // 크론 스케줄 설정
-// 일일 데이터 수집: 매일 03:00 KST
-cron.schedule('0 3 * * *', runDataCollection, {
-  timezone: 'Asia/Seoul'
-});
-
 // 주간 리포트: 매주 월요일 09:00 KST
 cron.schedule('0 9 * * 1', runWeeklyReport, {
   timezone: 'Asia/Seoul'
@@ -102,25 +74,12 @@ cron.schedule('0 9 1 * *', runMonthlyReport, {
 });
 
 console.log('✅ Cron jobs scheduled:');
-console.log('   📊 Daily:   Every day at 03:00 KST (data collection)');
 console.log('   📅 Weekly:  Every Monday at 09:00 KST');
 console.log('   📅 Monthly: 1st of every month at 09:00 KST');
 console.log('');
 
-// Railway cron 서비스로 실행될 때 즉시 데이터 수집 실행
-// 서비스 이름으로 자동 감지 (RAILWAY_SERVICE_NAME 환경변수)
-const serviceName = process.env.RAILWAY_SERVICE_NAME || '';
-const isCronCollector = serviceName.includes('cron-collector') ||
-                        process.env.CRON_TRIGGER === 'collect' ||
-                        process.env.RUN_NOW === 'collect';
-
-console.log(`🔍 Service: ${serviceName || 'local'}`);
-console.log(`🔍 CRON_TRIGGER: ${process.env.CRON_TRIGGER || 'not set'}`);
-
-if (isCronCollector) {
-  console.log('🔄 데이터 수집 서비스 감지 - 즉시 데이터 수집 실행');
-  runDataCollection();
-} else if (process.env.RUN_NOW === 'weekly') {
+// 수동 실행 지원
+if (process.env.RUN_NOW === 'weekly') {
   console.log('🔄 RUN_NOW=weekly - 즉시 주간 리포트 실행');
   runWeeklyReport();
 } else if (process.env.RUN_NOW === 'monthly') {
