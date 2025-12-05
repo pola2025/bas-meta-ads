@@ -91,14 +91,20 @@ async function getClientAccessToken(clientId, client) {
 }
 
 /**
- * 날짜 범위 계산
+ * 날짜 범위 계산 (KST 기준)
  */
 function getDateRange(days) {
-  const end = new Date();
-  end.setDate(end.getDate() - 1); // 어제까지
+  // KST (UTC+9) 기준으로 현재 날짜 계산
+  const now = new Date();
+  const kstOffset = 9 * 60 * 60 * 1000; // 9시간 (밀리초)
+  const kstNow = new Date(now.getTime() + kstOffset);
+
+  // KST 기준 어제
+  const end = new Date(kstNow);
+  end.setUTCDate(end.getUTCDate() - 1);
 
   const start = new Date(end);
-  start.setDate(end.getDate() - (days - 1));
+  start.setUTCDate(end.getUTCDate() - (days - 1));
 
   return {
     since: start.toISOString().split('T')[0],
