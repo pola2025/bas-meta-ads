@@ -263,8 +263,8 @@ export default function ReportsPage() {
               <ComposedChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" tick={{ fontSize: 9 }} interval={isMonthly ? 0 : 1} />
-                <YAxis yAxisId="leads" tick={{ fontSize: 9, fill: '#3B82F6' }} width={30} />
-                <YAxis yAxisId="video" orientation="right" tick={{ fontSize: 9, fill: '#EF4444' }} width={35} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v} />
+                <YAxis yAxisId="leads" tick={{ fontSize: 9, fill: '#3B82F6' }} width={30} tickFormatter={(v) => `${v}건`} />
+                <YAxis yAxisId="video" orientation="right" tick={{ fontSize: 9, fill: '#EF4444' }} width={40} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v} />
                 {hasWatchTime && <YAxis yAxisId="watch" orientation="right" hide />}
                 <Tooltip
                   contentStyle={{ fontSize: 10 }}
@@ -276,9 +276,10 @@ export default function ReportsPage() {
                     return [value, name];
                   }}
                 />
-                <Bar yAxisId="leads" dataKey="leads" fill="#3B82F6" name="리드" />
-                <Bar yAxisId="video" dataKey="spend" fill="#10B981" name="지출" />
-                {hasVideoData && <Bar yAxisId="video" dataKey="videoViews" fill="#EF4444" name="영상조회" />}
+                <Legend wrapperStyle={{ fontSize: 9 }} />
+                <Bar yAxisId="leads" dataKey="leads" fill="#3B82F6" name="리드" barSize={15} />
+                <Bar yAxisId="video" dataKey="spend" fill="#10B981" name="지출" barSize={15} />
+                {hasVideoData && <Bar yAxisId="video" dataKey="videoViews" fill="#EF4444" name="영상조회" barSize={15} />}
                 {hasWatchTime && <Line yAxisId="watch" type="monotone" dataKey="avgWatchTime" stroke="#9333EA" strokeWidth={2} dot={{ r: 3, fill: '#9333EA' }} name="시청시간" />}
               </ComposedChart>
             </ResponsiveContainer>
@@ -480,9 +481,9 @@ export default function ReportsPage() {
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar yAxisId="leads" dataKey="leads" fill="#3B82F6" name="리드" />
-                <Bar yAxisId="video" dataKey="spend" fill="#10B981" name="지출" />
-                {hasVideoData && <Bar yAxisId="video" dataKey="videoViews" fill="#EF4444" name="영상조회" />}
+                <Bar yAxisId="leads" dataKey="leads" fill="#3B82F6" name="리드" barSize={20} />
+                <Bar yAxisId="video" dataKey="spend" fill="#10B981" name="지출" barSize={20} />
+                {hasVideoData && <Bar yAxisId="video" dataKey="videoViews" fill="#EF4444" name="영상조회" barSize={20} />}
                 {hasWatchTime && <Line yAxisId="watch" type="monotone" dataKey="avgWatchTime" stroke="#9333EA" strokeWidth={2} dot={{ r: 4, fill: '#9333EA' }} name="시청시간" />}
               </ComposedChart>
             </ResponsiveContainer>
