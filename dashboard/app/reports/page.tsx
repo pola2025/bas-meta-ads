@@ -265,6 +265,7 @@ export default function ReportsPage() {
                 <XAxis dataKey="name" tick={{ fontSize: 9 }} interval={isMonthly ? 0 : 1} />
                 <YAxis yAxisId="leads" tick={{ fontSize: 9, fill: '#3B82F6' }} width={30} tickFormatter={(v) => `${v}건`} />
                 <YAxis yAxisId="video" orientation="right" tick={{ fontSize: 9, fill: '#EF4444' }} width={40} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v} />
+                <YAxis yAxisId="spend" orientation="right" tick={{ fontSize: 9, fill: '#10B981' }} width={35} tickFormatter={(v) => `$${v}`} hide />
                 {hasWatchTime && <YAxis yAxisId="watch" orientation="right" hide />}
                 <Tooltip
                   contentStyle={{ fontSize: 10 }}
@@ -277,9 +278,9 @@ export default function ReportsPage() {
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: 9 }} />
-                <Bar yAxisId="leads" dataKey="leads" fill="#3B82F6" name="리드" barSize={15} />
-                <Bar yAxisId="video" dataKey="spend" fill="#10B981" name="지출" barSize={15} />
-                {hasVideoData && <Bar yAxisId="video" dataKey="videoViews" fill="#EF4444" name="영상조회" barSize={15} />}
+                <Bar yAxisId="leads" dataKey="leads" fill="#3B82F6" name="리드" barSize={18} />
+                {hasVideoData && <Bar yAxisId="video" dataKey="videoViews" fill="#EF4444" name="영상조회" barSize={18} />}
+                <Line yAxisId="spend" type="monotone" dataKey="spend" stroke="#10B981" strokeWidth={2} dot={{ r: 3, fill: '#10B981' }} name="지출" />
                 {hasWatchTime && <Line yAxisId="watch" type="monotone" dataKey="avgWatchTime" stroke="#9333EA" strokeWidth={2} dot={{ r: 3, fill: '#9333EA' }} name="시청시간" />}
               </ComposedChart>
             </ResponsiveContainer>
@@ -470,6 +471,7 @@ export default function ReportsPage() {
                 <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                 <YAxis yAxisId="leads" tick={{ fontSize: 12, fill: '#3B82F6' }} tickFormatter={(v) => `${v}건`} />
                 <YAxis yAxisId="video" orientation="right" tick={{ fontSize: 12, fill: '#EF4444' }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}K` : v} />
+                <YAxis yAxisId="spend" orientation="right" hide />
                 {hasWatchTime && <YAxis yAxisId="watch" orientation="right" hide />}
                 <Tooltip
                   formatter={(value: number, name: string) => {
@@ -481,9 +483,9 @@ export default function ReportsPage() {
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar yAxisId="leads" dataKey="leads" fill="#3B82F6" name="리드" barSize={20} />
-                <Bar yAxisId="video" dataKey="spend" fill="#10B981" name="지출" barSize={20} />
-                {hasVideoData && <Bar yAxisId="video" dataKey="videoViews" fill="#EF4444" name="영상조회" barSize={20} />}
+                <Bar yAxisId="leads" dataKey="leads" fill="#3B82F6" name="리드" barSize={25} />
+                {hasVideoData && <Bar yAxisId="video" dataKey="videoViews" fill="#EF4444" name="영상조회" barSize={25} />}
+                <Line yAxisId="spend" type="monotone" dataKey="spend" stroke="#10B981" strokeWidth={2} dot={{ r: 4, fill: '#10B981' }} name="지출" />
                 {hasWatchTime && <Line yAxisId="watch" type="monotone" dataKey="avgWatchTime" stroke="#9333EA" strokeWidth={2} dot={{ r: 4, fill: '#9333EA' }} name="시청시간" />}
               </ComposedChart>
             </ResponsiveContainer>
