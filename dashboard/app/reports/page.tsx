@@ -263,22 +263,22 @@ export default function ReportsPage() {
               <ComposedChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" tick={{ fontSize: 9 }} interval={isMonthly ? 0 : 1} />
-                <YAxis yAxisId="left" tick={{ fontSize: 9 }} width={30} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9 }} width={35} tickFormatter={(v) => `$${v}`} />
+                <YAxis yAxisId="leads" tick={{ fontSize: 9, fill: '#3B82F6' }} width={30} />
+                <YAxis yAxisId="video" orientation="right" tick={{ fontSize: 9, fill: '#EF4444' }} width={35} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v} />
                 {hasWatchTime && <YAxis yAxisId="watch" orientation="right" hide />}
                 <Tooltip
                   contentStyle={{ fontSize: 10 }}
                   formatter={(value: number, name: string) => {
-                    if (name === 'leads') return [value, '리드'];
-                    if (name === 'spend') return [`$${value.toFixed(0)}`, '지출'];
-                    if (name === 'videoViews') return [value, '영상조회'];
-                    if (name === 'avgWatchTime') return [`${value.toFixed(1)}초`, '시청시간'];
+                    if (name === 'leads' || name === '리드') return [`${value}건`, '리드'];
+                    if (name === 'spend' || name === '지출') return [`$${value.toFixed(0)}`, '지출'];
+                    if (name === 'videoViews' || name === '영상조회') return [`${value.toLocaleString()}회`, '영상조회'];
+                    if (name === 'avgWatchTime' || name === '시청시간') return [`${value.toFixed(1)}초`, '시청시간'];
                     return [value, name];
                   }}
                 />
-                <Bar yAxisId="left" dataKey="leads" fill="#3B82F6" name="리드" />
-                <Bar yAxisId="right" dataKey="spend" fill="#10B981" name="지출" />
-                {hasVideoData && <Bar yAxisId="left" dataKey="videoViews" fill="#EF4444" name="영상조회" />}
+                <Bar yAxisId="leads" dataKey="leads" fill="#3B82F6" name="리드" />
+                <Bar yAxisId="video" dataKey="spend" fill="#10B981" name="지출" />
+                {hasVideoData && <Bar yAxisId="video" dataKey="videoViews" fill="#EF4444" name="영상조회" />}
                 {hasWatchTime && <Line yAxisId="watch" type="monotone" dataKey="avgWatchTime" stroke="#9333EA" strokeWidth={2} dot={{ r: 3, fill: '#9333EA' }} name="시청시간" />}
               </ComposedChart>
             </ResponsiveContainer>
@@ -467,22 +467,22 @@ export default function ReportsPage() {
               <ComposedChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} tickFormatter={(v) => `$${v}`} />
+                <YAxis yAxisId="leads" tick={{ fontSize: 12, fill: '#3B82F6' }} tickFormatter={(v) => `${v}건`} />
+                <YAxis yAxisId="video" orientation="right" tick={{ fontSize: 12, fill: '#EF4444' }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}K` : v} />
                 {hasWatchTime && <YAxis yAxisId="watch" orientation="right" hide />}
                 <Tooltip
                   formatter={(value: number, name: string) => {
-                    if (name === 'spend') return [`$${value.toFixed(2)}`, '지출'];
-                    if (name === 'cpl') return [`$${value.toFixed(2)}`, 'CPL'];
-                    if (name === 'videoViews') return [value, '영상조회'];
-                    if (name === 'avgWatchTime') return [`${value.toFixed(1)}초`, '시청시간'];
-                    return [value, '리드'];
+                    if (name === 'leads' || name === '리드') return [`${value}건`, '리드'];
+                    if (name === 'spend' || name === '지출') return [`$${value.toFixed(2)}`, '지출'];
+                    if (name === 'videoViews' || name === '영상조회') return [`${value.toLocaleString()}회`, '영상조회'];
+                    if (name === 'avgWatchTime' || name === '시청시간') return [`${value.toFixed(1)}초`, '시청시간'];
+                    return [value, name];
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar yAxisId="left" dataKey="leads" fill="#3B82F6" name="리드" />
-                <Bar yAxisId="right" dataKey="spend" fill="#10B981" name="지출" />
-                {hasVideoData && <Bar yAxisId="left" dataKey="videoViews" fill="#EF4444" name="영상조회" />}
+                <Bar yAxisId="leads" dataKey="leads" fill="#3B82F6" name="리드" />
+                <Bar yAxisId="video" dataKey="spend" fill="#10B981" name="지출" />
+                {hasVideoData && <Bar yAxisId="video" dataKey="videoViews" fill="#EF4444" name="영상조회" />}
                 {hasWatchTime && <Line yAxisId="watch" type="monotone" dataKey="avgWatchTime" stroke="#9333EA" strokeWidth={2} dot={{ r: 4, fill: '#9333EA' }} name="시청시간" />}
               </ComposedChart>
             </ResponsiveContainer>
