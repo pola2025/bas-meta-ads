@@ -253,15 +253,17 @@ export default function ReportsPage() {
               <BarChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" tick={{ fontSize: 9 }} interval={isMonthly ? 0 : 1} />
-                <YAxis tick={{ fontSize: 9 }} width={30} />
+                <YAxis yAxisId="left" tick={{ fontSize: 9 }} width={30} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9 }} width={35} tickFormatter={(v) => `$${v}`} />
                 <Tooltip
                   contentStyle={{ fontSize: 10 }}
                   formatter={(value: number, name: string) => {
                     if (name === 'leads') return [value, '리드'];
-                    return [`$${value.toFixed(0)}`, name === 'spend' ? '지출' : 'CPL'];
+                    return [`$${value.toFixed(0)}`, '지출'];
                   }}
                 />
-                <Bar dataKey="leads" fill="#3B82F6" name="리드" />
+                <Bar yAxisId="left" dataKey="leads" fill="#3B82F6" name="리드" />
+                <Bar yAxisId="right" dataKey="spend" fill="#10B981" name="지출" />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -301,17 +303,17 @@ export default function ReportsPage() {
           <span className="text-right">CPL</span>
           <span className="text-right">효율</span>
         </div>
-        {/* 광고 행 */}
-        {ads.filter(ad => ad.leads > 0 && ad.cpl !== null).sort((a, b) => a.cpl - b.cpl).map((ad, idx) => {
+        {/* 광고 행 - 지출이 있는 모든 광고 표시 */}
+        {ads.filter(ad => ad.spend > 0).sort((a, b) => b.spend - a.spend).map((ad, idx) => {
           const efficiency = ad.lead_percent - ad.spend_percent;
           return (
             <div key={ad.ad_id || idx} className="grid grid-cols-[1fr_40px_40px_40px] gap-1 px-2 py-2 items-center bg-gray-50 rounded-lg">
               <span className="text-[10px] font-medium text-gray-900 truncate">{ad.ad_name}</span>
               <span className="text-[10px] font-bold text-blue-600 text-right">{ad.leads}</span>
               <span className={`text-[10px] font-bold text-right ${
-                ad.cpl < (selectedReport?.avg_cpl || 0) ? 'text-green-600' : 'text-orange-600'
+                ad.leads > 0 ? (ad.cpl < (selectedReport?.avg_cpl || 0) ? 'text-green-600' : 'text-orange-600') : 'text-gray-400'
               }`}>
-                ${ad.cpl.toFixed(0)}
+                {ad.leads > 0 ? `$${ad.cpl.toFixed(0)}` : '-'}
               </span>
               <span className={`text-[9px] text-center px-1 py-0.5 rounded ${
                 efficiency > 5 ? 'bg-green-100 text-green-700' :
@@ -441,15 +443,16 @@ export default function ReportsPage() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                 <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} tickFormatter={(v) => `$${v}`} />
                 <Tooltip
                   formatter={(value: number, name: string) => {
-                    if (name === 'spend' || name === 'cpl') return [`$${value.toFixed(2)}`, name === 'spend' ? '지출' : 'CPL'];
+                    if (name === 'spend') return [`$${value.toFixed(2)}`, '지출'];
+                    if (name === 'cpl') return [`$${value.toFixed(2)}`, 'CPL'];
                     return [value, '리드'];
                   }}
                 />
                 <Bar yAxisId="left" dataKey="leads" fill="#3B82F6" name="리드" />
-                <Line yAxisId="right" type="monotone" dataKey="cpl" stroke="#EF4444" name="CPL" />
+                <Bar yAxisId="right" dataKey="spend" fill="#10B981" name="지출" />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -509,7 +512,7 @@ export default function ReportsPage() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {ads.filter(ad => ad.leads > 0 && ad.cpl !== null).sort((a, b) => a.cpl - b.cpl).map((ad, idx) => {
+            {ads.filter(ad => ad.spend > 0).sort((a, b) => b.spend - a.spend).map((ad, idx) => {
               const efficiency = ad.lead_percent - ad.spend_percent;
               return (
                 <tr key={ad.ad_id || idx} className="hover:bg-gray-50">
@@ -523,9 +526,13 @@ export default function ReportsPage() {
                     ${ad.spend.toFixed(2)}
                   </td>
                   <td className="px-4 py-3 text-sm text-right">
-                    <span className={ad.cpl < (selectedReport?.avg_cpl || 0) ? 'text-green-600' : 'text-red-600'}>
-                      ${ad.cpl.toFixed(2)}
-                    </span>
+                    {ad.leads > 0 ? (
+                      <span className={ad.cpl < (selectedReport?.avg_cpl || 0) ? 'text-green-600' : 'text-red-600'}>
+                        ${ad.cpl.toFixed(2)}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-sm text-right text-gray-600">
                     {ad.ctr.toFixed(2)}%
