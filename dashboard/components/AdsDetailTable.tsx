@@ -75,11 +75,11 @@ export function AdsDetailTable({ data, onAdClick }: AdsDetailTableProps) {
   }
 
   const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('en-US').format(num)
+    return new Intl.NumberFormat('ko-KR').format(num)
   }
 
   const formatCurrency = (num: number) => {
-    return `$${num.toFixed(2)}`
+    return `₩${Math.round(num).toLocaleString('ko-KR')}`
   }
 
   const formatPercentage = (num: number) => {
@@ -223,9 +223,9 @@ export function AdsDetailTable({ data, onAdClick }: AdsDetailTableProps) {
                 </span>
                 {/* CPL */}
                 <span className={`text-[11px] font-bold text-right ${
-                  ad.cpl > 20 ? 'text-orange-600' : ad.cpl > 0 ? 'text-green-600' : 'text-gray-400'
+                  ad.cpl > 20000 ? 'text-orange-600' : ad.cpl > 0 ? 'text-green-600' : 'text-gray-400'
                 }`}>
-                  {ad.cpl > 0 ? `$${ad.cpl.toFixed(0)}` : '-'}
+                  {ad.cpl > 0 ? `₩${Math.round(ad.cpl).toLocaleString('ko-KR')}` : '-'}
                 </span>
               </div>
 

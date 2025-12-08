@@ -75,20 +75,20 @@ export function DataMonitor({
 
     // 2. 일평균 지출 검증
     const avgSpendPerDay = currentData.total_spend / currentPeriod.days;
-    if (avgSpendPerDay > 2000) { // 일 평균 $2000 이상은 의심
+    if (avgSpendPerDay > 200000) { // 일 평균 ₩200,000 이상은 의심
       results.push({
         status: 'warning',
         message: '높은 일평균 지출',
-        details: `일평균 $${avgSpendPerDay.toFixed(2)} (검토 필요)`
+        details: `일평균 ₩${Math.round(avgSpendPerDay).toLocaleString('ko-KR')} (검토 필요)`
       });
     }
 
     // 3. CPL 검증
-    if (currentData.avg_cpl > 200 || currentData.avg_cpl < 5) {
+    if (currentData.avg_cpl > 100000 || currentData.avg_cpl < 1000) {
       results.push({
         status: 'warning',
         message: 'CPL 이상치 감지',
-        details: `평균 CPL: $${currentData.avg_cpl.toFixed(2)}`
+        details: `평균 CPL: ₩${Math.round(currentData.avg_cpl).toLocaleString('ko-KR')}`
       });
     }
 
@@ -237,19 +237,19 @@ export function DataMonitor({
           <div>
             <div className="text-gray-600 mb-1">총 지출</div>
             <div className="font-semibold text-gray-900">
-              ${currentData.total_spend.toLocaleString()}
+              ₩{currentData.total_spend.toLocaleString('ko-KR')}
             </div>
           </div>
           <div>
             <div className="text-gray-600 mb-1">총 리드</div>
             <div className="font-semibold text-gray-900">
-              {currentData.total_leads.toLocaleString()}
+              {currentData.total_leads.toLocaleString('ko-KR')}
             </div>
           </div>
           <div>
             <div className="text-gray-600 mb-1">평균 CPL</div>
             <div className="font-semibold text-gray-900">
-              ${currentData.avg_cpl.toFixed(2)}
+              ₩{Math.round(currentData.avg_cpl).toLocaleString('ko-KR')}
             </div>
           </div>
         </div>

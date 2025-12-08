@@ -286,7 +286,7 @@ export function TopAdsTable({
                   {/* 지출 */}
                   <td className="px-2 py-2 lg:px-3 whitespace-nowrap text-right">
                     <span className="text-xs lg:text-sm text-gray-700">
-                      ${ad.spend.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                      ₩{ad.spend.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
                     </span>
                   </td>
 
@@ -294,16 +294,16 @@ export function TopAdsTable({
                   <td className="px-2 py-2 lg:px-3 whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-1">
                       <span className={`text-xs lg:text-sm font-semibold ${
-                        ad.cpl > 20
+                        ad.cpl > 20000
                           ? 'text-orange-600'
                           : 'text-green-600'
                       }`}>
-                        ${ad.cpl.toFixed(2)}
+                        ₩{ad.cpl.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
                       </span>
-                      {ad.cpl > 20 ? (
-                        <span title="CPL $20 초과 - 검토 필요" className="text-orange-500 text-sm">⚠️</span>
+                      {ad.cpl > 20000 ? (
+                        <span title="CPL ₩20,000 초과 - 검토 필요" className="text-orange-500 text-sm">⚠️</span>
                       ) : (
-                        <span title="CPL $20 이하 - 양호" className="text-green-500 text-sm">✅</span>
+                        <span title="CPL ₩20,000 이하 - 양호" className="text-green-500 text-sm">✅</span>
                       )}
                     </div>
                   </td>

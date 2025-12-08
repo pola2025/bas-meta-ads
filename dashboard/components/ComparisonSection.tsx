@@ -37,11 +37,11 @@ function MetricComparison({ icon, label, current, previous, format, reverseColor
   const formatValue = (value: number) => {
     switch (format) {
       case 'currency':
-        return `$${value.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+        return `₩${value.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}`;
       case 'percentage':
         return `${value.toFixed(2)}%`;
       default:
-        return value.toLocaleString('en-US');
+        return value.toLocaleString('ko-KR');
     }
   };
 

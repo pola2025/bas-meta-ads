@@ -18,6 +18,10 @@ import { ComparisonSection } from '@/components/ComparisonSection';
 import { DashboardSkeleton } from '@/components/Skeleton';
 import { PeriodDataTable } from '@/components/PeriodDataTable';
 import { Accordion } from '@/components/Accordion';
+import { ExecutiveSummary } from '@/components/ExecutiveSummary';
+import { DailyPerformanceCards } from '@/components/DailyPerformanceCards';
+import { AIInsightBox } from '@/components/AIInsightBox';
+import { WeeklyComparisonTable } from '@/components/WeeklyComparisonTable';
 import { TrendingUp, DollarSign, Target, MousePointerClick, Lock, Clock } from 'lucide-react';
 import {
   getKPISummary,
@@ -417,6 +421,59 @@ export default function Home() {
             />
           </section>
 
+          {/* 핵심 성과 요약 (Mockup 스타일) */}
+          <section>
+            <ExecutiveSummary
+              highlights={{
+                emoji: '✨',
+                title: '핵심 성과',
+                content: dailyTrend.length > 0
+                  ? `${dailyTrend.reduce((max, d) => d.leads > max.leads ? d : max, dailyTrend[0])?.date?.slice(5) || '-'} 최고 ${Math.max(...dailyTrend.map(d => d.leads))}건 달성`
+                  : '데이터 없음'
+              }}
+              warnings={{
+                emoji: '⚠️',
+                title: '주의 필요',
+                content: kpi.avg_cpl > 0
+                  ? kpi.avg_cpl > 30000
+                    ? `CPL ₩${Math.round(kpi.avg_cpl).toLocaleString()} 높음`
+                    : dailyTrend.length > 0 && Math.min(...dailyTrend.filter(d => d.leads > 0).map(d => d.leads)) < 3
+                    ? '일부 일자 리드 저조'
+                    : '특이사항 없음'
+                  : '데이터 없음'
+              }}
+              actions={{
+                emoji: '💡',
+                title: '권장 액션',
+                content: kpi.avg_cpl > 30000
+                  ? '타겟팅 최적화 검토'
+                  : kpi.total_leads < 10
+                  ? '예산 증액 검토'
+                  : '현 전략 유지'
+              }}
+              summaryText={
+                kpi.total_leads > 0
+                  ? `이번 기간 <strong>총 광고비 ₩${kpi.total_spend.toLocaleString()}</strong>으로 <strong>리드 ${kpi.total_leads}건</strong>을 확보했습니다. 평균 CPL은 <strong>₩${Math.round(kpi.avg_cpl).toLocaleString()}</strong>입니다.`
+                  : undefined
+              }
+            />
+          </section>
+
+          {/* 일별 성과 카드 (7일) */}
+          {dailyTrend.length > 0 && (
+            <section>
+              <DailyPerformanceCards
+                data={dailyTrend.map(d => ({
+                  date: d.date,
+                  leads: d.leads,
+                  cpl: d.cpl,
+                  spend: d.spend,
+                  clicks: d.clicks
+                }))}
+              />
+            </section>
+          )}
+
           {/* KPI 카드 영역 */}
           <section>
             <h2 className="text-lg sm:text-2xl font-bold mb-3 sm:mb-4">주요 지표</h2>
@@ -477,25 +534,51 @@ export default function Home() {
             </div>
           </section>
 
-          {/* 비교 분석 섹션 */}
+          {/* 비교 분석 섹션 - 주간 비교 테이블 스타일 */}
           {compareMode !== 'none' && comparisonKpi && comparisonDates && (
             <section>
-              <ComparisonSection
-                current={{
-                  total_leads: kpi.total_leads,
-                  total_spend: kpi.total_spend,
-                  avg_cpl: kpi.avg_cpl,
-                  avg_ctr: kpi.avg_ctr
-                }}
-                previous={{
-                  total_leads: comparisonKpi.total_leads,
-                  total_spend: comparisonKpi.total_spend,
-                  avg_cpl: comparisonKpi.avg_cpl,
-                  avg_ctr: comparisonKpi.avg_ctr
-                }}
-                currentPeriod={comparisonDates.formatted.current}
-                previousPeriod={comparisonDates.formatted.previous}
-                mode={compareMode as 'weekly' | 'monthly'}
+              <WeeklyComparisonTable
+                metrics={[
+                  {
+                    label: '리드수',
+                    current: kpi.total_leads,
+                    previous: comparisonKpi.total_leads,
+                    changePercent: comparisonKpi.total_leads > 0
+                      ? ((kpi.total_leads - comparisonKpi.total_leads) / comparisonKpi.total_leads) * 100
+                      : 0,
+                    format: 'number'
+                  },
+                  {
+                    label: '지출',
+                    current: kpi.total_spend,
+                    previous: comparisonKpi.total_spend,
+                    changePercent: comparisonKpi.total_spend > 0
+                      ? ((kpi.total_spend - comparisonKpi.total_spend) / comparisonKpi.total_spend) * 100
+                      : 0,
+                    format: 'currency'
+                  },
+                  {
+                    label: 'CPL',
+                    current: kpi.avg_cpl,
+                    previous: comparisonKpi.avg_cpl,
+                    changePercent: comparisonKpi.avg_cpl > 0
+                      ? ((kpi.avg_cpl - comparisonKpi.avg_cpl) / comparisonKpi.avg_cpl) * 100
+                      : 0,
+                    format: 'currency',
+                    invertTrend: true // CPL은 낮을수록 좋음
+                  },
+                  {
+                    label: 'CTR',
+                    current: kpi.avg_ctr,
+                    previous: comparisonKpi.avg_ctr,
+                    changePercent: comparisonKpi.avg_ctr > 0
+                      ? ((kpi.avg_ctr - comparisonKpi.avg_ctr) / comparisonKpi.avg_ctr) * 100
+                      : 0,
+                    format: 'percentage'
+                  }
+                ]}
+                currentPeriod={comparisonDates.formatted.current.split(' ~ ')[0]?.slice(5) + '~' + comparisonDates.formatted.current.split(' ~ ')[1]?.slice(5)}
+                previousPeriod={comparisonDates.formatted.previous.split(' ~ ')[0]?.slice(5) + '~' + comparisonDates.formatted.previous.split(' ~ ')[1]?.slice(5)}
               />
             </section>
           )}
@@ -536,6 +619,45 @@ export default function Home() {
                           }}
                         />
                       </div>
+
+                      {/* AI 인사이트 박스 */}
+                      {kpi.total_leads > 0 && (
+                        <div className="mt-6">
+                          <AIInsightBox
+                            summaryItems={[
+                              {
+                                icon: '✓',
+                                text: kpi.avg_cpl < 25000
+                                  ? `CPL <strong>₩${Math.round(kpi.avg_cpl).toLocaleString()}</strong>으로 효율적 운영 중`
+                                  : `CPL <strong>₩${Math.round(kpi.avg_cpl).toLocaleString()}</strong> - 최적화 검토 필요`,
+                                type: kpi.avg_cpl < 25000 ? 'success' : 'warning'
+                              },
+                              {
+                                icon: '✓',
+                                text: `총 <strong>${kpi.total_leads}건</strong> 리드 확보`,
+                                type: 'success'
+                              },
+                              {
+                                icon: '!',
+                                text: dailyTrend.length > 0 && Math.max(...dailyTrend.map(d => d.leads)) > Math.min(...dailyTrend.filter(d => d.leads > 0).map(d => d.leads)) * 2
+                                  ? '일별 성과 <strong>편차 큼</strong> - 일정한 운영 필요'
+                                  : '일별 성과 <strong>안정적</strong> 유지 중',
+                                type: dailyTrend.length > 0 && Math.max(...dailyTrend.map(d => d.leads)) > Math.min(...dailyTrend.filter(d => d.leads > 0).map(d => d.leads)) * 2 ? 'warning' : 'success'
+                              }
+                            ]}
+                            actionItems={[
+                              {
+                                title: kpi.avg_cpl > 30000 ? '타겟팅 재검토' : '현 전략 유지',
+                                description: kpi.avg_cpl > 30000 ? '예상 CPL 개선: 10~15%' : '안정적 성과 지속'
+                              },
+                              {
+                                title: topAds.length > 0 && topAds[0]?.leads > kpi.total_leads * 0.3 ? '주력 광고 예산 증액' : '신규 소재 테스트',
+                                description: topAds.length > 0 && topAds[0]?.leads > kpi.total_leads * 0.3 ? '예상 추가 리드: +20%' : '다양한 메시지 실험'
+                              }
+                            ]}
+                          />
+                        </div>
+                      )}
 
                       {/* 하단 여백 (푸터 높이) */}
                       <div className="py-8 lg:py-16" />
