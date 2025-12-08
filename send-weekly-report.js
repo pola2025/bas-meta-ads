@@ -507,18 +507,6 @@ async function generateAndSendReport(client, dates, forceResend = false) {
     return { client: clientName, status: 'skipped', reason: 'no_chat_id' };
   }
 
-  // CPL 위험 시 즉시 알림 발송 ($40 이상)
-  if (thisStats.cpl >= CPL_DANGER_THRESHOLD) {
-    console.log(`🚨 ${clientName}: CPL $${thisStats.cpl.toFixed(2)} - 위험 알림 발송`);
-    await sendImmediateAlert({
-      botToken: process.env.TELEGRAM_BOT_TOKEN,
-      chatId: chatId,
-      clientName: clientName,
-      cpl: thisStats.cpl,
-      ads: adPerformance
-    });
-  }
-
   // 텔레그램 발송 ON/OFF 확인
   if (client.telegram_enabled === false) {
     console.log(`⏭️ ${clientName}: 텔레그램 발송 비활성화 - 발송 생략`);
@@ -585,6 +573,18 @@ async function generateAndSendReport(client, dates, forceResend = false) {
   const clientBot = clientName === '내일채움'
     ? new TelegramBot(NAEILCHAEUM_BOT_TOKEN)
     : bot;
+
+  // CPL 위험 시 즉시 알림 발송 ($40 이상) - 실제 발송 시에만
+  if (thisStats.cpl >= CPL_DANGER_THRESHOLD) {
+    console.log(`🚨 ${clientName}: CPL $${thisStats.cpl.toFixed(2)} - 위험 알림 발송`);
+    await sendImmediateAlert({
+      botToken: process.env.TELEGRAM_BOT_TOKEN,
+      chatId: chatId,
+      clientName: clientName,
+      cpl: thisStats.cpl,
+      ads: adPerformance
+    });
+  }
 
   console.log(`📤 ${clientName} 텔레그램 발송 중... (Chat ID: ${chatId})`);
 
