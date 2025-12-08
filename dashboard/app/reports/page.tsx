@@ -12,7 +12,7 @@ import {
 import Link from 'next/link';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, PieChart, Pie, Cell
+  LineChart, Line, PieChart, Pie, Cell, ComposedChart, Legend
 } from 'recharts';
 
 interface ReportData {
@@ -38,6 +38,8 @@ interface ReportData {
     leads: number;
     spend: number;
     cpl: number;
+    videoViews?: number;
+    avgWatchTime?: number;
   }>;
   weekly_stats?: Array<{
     week: number;
@@ -238,8 +240,16 @@ export default function ReportsPage() {
           name: d.date.substring(5),
           leads: d.leads,
           spend: d.spend,
-          cpl: d.cpl
+          cpl: d.cpl,
+          videoViews: d.videoViews || 0,
+          avgWatchTime: d.avgWatchTime || 0
         }));
+
+    // 영상 데이터 유무 확인 (eslint-disable를 사용하여 any 타입 허용)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const hasVideoData = !isMonthly && trendData.some((d: any) => (d.videoViews || 0) > 0);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const hasWatchTime = !isMonthly && trendData.some((d: any) => (d.avgWatchTime || 0) > 0);
 
     return (
       <div className="space-y-4">
@@ -249,22 +259,28 @@ export default function ReportsPage() {
             {isMonthly ? '주별 트렌드' : '일별 트렌드'}
           </h4>
           {trendData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={160}>
-              <BarChart data={trendData}>
+            <ResponsiveContainer width="100%" height={hasWatchTime ? 180 : 160}>
+              <ComposedChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" tick={{ fontSize: 9 }} interval={isMonthly ? 0 : 1} />
                 <YAxis yAxisId="left" tick={{ fontSize: 9 }} width={30} />
                 <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9 }} width={35} tickFormatter={(v) => `$${v}`} />
+                {hasWatchTime && <YAxis yAxisId="watch" orientation="right" hide />}
                 <Tooltip
                   contentStyle={{ fontSize: 10 }}
                   formatter={(value: number, name: string) => {
                     if (name === 'leads') return [value, '리드'];
-                    return [`$${value.toFixed(0)}`, '지출'];
+                    if (name === 'spend') return [`$${value.toFixed(0)}`, '지출'];
+                    if (name === 'videoViews') return [value, '영상조회'];
+                    if (name === 'avgWatchTime') return [`${value.toFixed(1)}초`, '시청시간'];
+                    return [value, name];
                   }}
                 />
                 <Bar yAxisId="left" dataKey="leads" fill="#3B82F6" name="리드" />
                 <Bar yAxisId="right" dataKey="spend" fill="#10B981" name="지출" />
-              </BarChart>
+                {hasVideoData && <Bar yAxisId="left" dataKey="videoViews" fill="#EF4444" name="영상조회" />}
+                {hasWatchTime && <Line yAxisId="watch" type="monotone" dataKey="avgWatchTime" stroke="#9333EA" strokeWidth={2} dot={{ r: 3, fill: '#9333EA' }} name="시청시간" />}
+              </ComposedChart>
             </ResponsiveContainer>
           ) : (
             <div className="text-center text-gray-400 py-4 text-xs">데이터 없음</div>
@@ -424,8 +440,16 @@ export default function ReportsPage() {
           name: d.date.substring(5),
           leads: d.leads,
           spend: d.spend,
-          cpl: d.cpl
+          cpl: d.cpl,
+          videoViews: d.videoViews || 0,
+          avgWatchTime: d.avgWatchTime || 0
         }));
+
+    // 영상 데이터 유무 확인 (eslint-disable를 사용하여 any 타입 허용)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const hasVideoData = !isMonthly && trendData.some((d: any) => (d.videoViews || 0) > 0);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const hasWatchTime = !isMonthly && trendData.some((d: any) => (d.avgWatchTime || 0) > 0);
 
     // 요일별 데이터 (월간만)
     const dayData = data.day_of_week_stats || [];
@@ -436,24 +460,31 @@ export default function ReportsPage() {
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <h4 className="text-sm font-semibold text-gray-700 mb-4">
             {isMonthly ? '주별 트렌드' : '일별 트렌드'}
+            {hasWatchTime && <span className="ml-2 text-xs text-purple-600 font-normal">(보라선: 시청시간)</span>}
           </h4>
           {trendData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={trendData}>
+            <ResponsiveContainer width="100%" height={hasWatchTime ? 280 : 250}>
+              <ComposedChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                 <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
                 <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} tickFormatter={(v) => `$${v}`} />
+                {hasWatchTime && <YAxis yAxisId="watch" orientation="right" hide />}
                 <Tooltip
                   formatter={(value: number, name: string) => {
                     if (name === 'spend') return [`$${value.toFixed(2)}`, '지출'];
                     if (name === 'cpl') return [`$${value.toFixed(2)}`, 'CPL'];
+                    if (name === 'videoViews') return [value, '영상조회'];
+                    if (name === 'avgWatchTime') return [`${value.toFixed(1)}초`, '시청시간'];
                     return [value, '리드'];
                   }}
                 />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar yAxisId="left" dataKey="leads" fill="#3B82F6" name="리드" />
                 <Bar yAxisId="right" dataKey="spend" fill="#10B981" name="지출" />
-              </BarChart>
+                {hasVideoData && <Bar yAxisId="left" dataKey="videoViews" fill="#EF4444" name="영상조회" />}
+                {hasWatchTime && <Line yAxisId="watch" type="monotone" dataKey="avgWatchTime" stroke="#9333EA" strokeWidth={2} dot={{ r: 4, fill: '#9333EA' }} name="시청시간" />}
+              </ComposedChart>
             </ResponsiveContainer>
           ) : (
             <div className="text-center text-gray-400 py-8">데이터 없음</div>

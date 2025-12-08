@@ -122,6 +122,15 @@ function getActionValue(actions, actionType) {
 }
 
 /**
+ * video_avg_time_watched_actions에서 평균 시청 시간 추출
+ */
+function getVideoAvgTime(videoActions) {
+  if (!videoActions || !Array.isArray(videoActions)) return 0;
+  const action = videoActions.find(a => a.action_type === 'video_view');
+  return action ? parseFloat(action.value) || 0 : 0;
+}
+
+/**
  * Meta API 호출 (페이지네이션 + 자동 재시도 지원)
  */
 async function fetchMetaInsights(adAccountId, accessToken, startDate, endDate, retryCount = 0) {
@@ -133,7 +142,7 @@ async function fetchMetaInsights(adAccountId, accessToken, startDate, endDate, r
   const params = new URLSearchParams({
     access_token: accessToken,
     time_range: JSON.stringify({ since: startDate, until: endDate }),
-    fields: 'ad_id,ad_name,campaign_id,campaign_name,impressions,spend,inline_link_clicks,reach,actions,account_currency',
+    fields: 'ad_id,ad_name,campaign_id,campaign_name,impressions,spend,inline_link_clicks,reach,actions,video_avg_time_watched_actions,account_currency',
     breakdowns: 'publisher_platform,device_platform',
     level: 'ad',
     limit: '500',
@@ -204,7 +213,9 @@ async function saveToRawData(clientId, insights) {
     reach: parseInt(item.reach) || 0,
     clicks: parseInt(item.inline_link_clicks) || 0,
     leads: getActionValue(item.actions, 'lead'),
-    spend: parseFloat(item.spend) || 0
+    spend: parseFloat(item.spend) || 0,
+    video_views: getActionValue(item.actions, 'video_view'),
+    avg_watch_time: getVideoAvgTime(item.video_avg_time_watched_actions)
   }));
 
   let savedCount = 0;
