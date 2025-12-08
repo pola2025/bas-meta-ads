@@ -302,7 +302,7 @@ export default function ReportsPage() {
           <span className="text-right">효율</span>
         </div>
         {/* 광고 행 */}
-        {ads.sort((a, b) => a.cpl - b.cpl).map((ad, idx) => {
+        {ads.filter(ad => ad.leads > 0 && ad.cpl !== null).sort((a, b) => a.cpl - b.cpl).map((ad, idx) => {
           const efficiency = ad.lead_percent - ad.spend_percent;
           return (
             <div key={ad.ad_id || idx} className="grid grid-cols-[1fr_40px_40px_40px] gap-1 px-2 py-2 items-center bg-gray-50 rounded-lg">
@@ -374,14 +374,14 @@ export default function ReportsPage() {
             <span className="text-right">CPL</span>
             <span className="text-right">효율</span>
           </div>
-          {campaigns.map((camp, idx) => {
+          {campaigns.filter(camp => camp.cpl !== null || camp.leads > 0).map((camp, idx) => {
             const efficiency = camp.lead_percent - camp.spend_percent;
             return (
               <div key={camp.campaign_id || idx} className="grid grid-cols-[auto_1fr_40px_40px_40px] gap-1 px-2 py-2 items-center bg-gray-50 rounded-lg">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
                 <span className="text-[10px] font-medium text-gray-900 truncate">{camp.campaign_name}</span>
                 <span className="text-[10px] font-bold text-blue-600 text-right">{camp.leads}</span>
-                <span className="text-[10px] font-bold text-gray-900 text-right">${camp.cpl.toFixed(0)}</span>
+                <span className="text-[10px] font-bold text-gray-900 text-right">{camp.cpl !== null ? `$${camp.cpl.toFixed(0)}` : '-'}</span>
                 <span className={`text-[9px] text-center px-1 py-0.5 rounded ${
                   efficiency > 10 ? 'bg-green-100 text-green-700' :
                   efficiency < -10 ? 'bg-red-100 text-red-700' :
@@ -509,7 +509,7 @@ export default function ReportsPage() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {ads.sort((a, b) => a.cpl - b.cpl).map((ad, idx) => {
+            {ads.filter(ad => ad.leads > 0 && ad.cpl !== null).sort((a, b) => a.cpl - b.cpl).map((ad, idx) => {
               const efficiency = ad.lead_percent - ad.spend_percent;
               return (
                 <tr key={ad.ad_id || idx} className="hover:bg-gray-50">
@@ -594,7 +594,7 @@ export default function ReportsPage() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {campaigns.map((camp, idx) => {
+              {campaigns.filter(camp => camp.cpl !== null || camp.leads > 0).map((camp, idx) => {
                 const efficiency = camp.lead_percent - camp.spend_percent;
                 return (
                   <tr key={camp.campaign_id || idx} className="hover:bg-gray-50">
@@ -611,7 +611,7 @@ export default function ReportsPage() {
                       ${camp.spend.toFixed(2)} ({camp.spend_percent.toFixed(1)}%)
                     </td>
                     <td className="px-4 py-3 text-sm text-right text-gray-900">
-                      ${camp.cpl.toFixed(2)}
+                      {camp.cpl !== null ? `$${camp.cpl.toFixed(2)}` : '-'}
                     </td>
                     <td className="px-4 py-3 text-sm text-right">
                       <span className={`px-2 py-1 rounded text-xs ${
