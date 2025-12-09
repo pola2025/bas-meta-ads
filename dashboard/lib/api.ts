@@ -24,7 +24,7 @@ export async function getAllDailyTrend(clientId?: string): Promise<DailyTrend[]>
     while (hasMore) {
       let query = supabase
         .from('ads_insights_daily')
-        .select('date, impressions, clicks, leads, spend, avg_watch_time');
+        .select('date, impressions, clicks, leads, spend, video_views, avg_watch_time');
 
       if (clientId) {
         query = query.eq('client_id', clientId);
@@ -64,6 +64,7 @@ export async function getAllDailyTrend(clientId?: string): Promise<DailyTrend[]>
           ctr: 0,
           cvr: 0,
           cpl: 0,
+          video_views: 0,
           avg_watch_time: 0,
           _watchTimeSum: 0,
           _watchTimeCount: 0
@@ -73,6 +74,7 @@ export async function getAllDailyTrend(clientId?: string): Promise<DailyTrend[]>
       acc[date].clicks += row.clicks || 0;
       acc[date].leads += row.leads || 0;
       acc[date].spend += row.spend || 0;
+      acc[date].video_views = (acc[date].video_views || 0) + (row.video_views || 0);
       if (row.avg_watch_time) {
         acc[date]._watchTimeSum += row.avg_watch_time;
         acc[date]._watchTimeCount += 1;
@@ -90,6 +92,7 @@ export async function getAllDailyTrend(clientId?: string): Promise<DailyTrend[]>
       ctr: item.impressions > 0 ? (item.clicks / item.impressions) * 100 : 0,
       cvr: item.clicks > 0 ? (item.leads / item.clicks) * 100 : 0,
       cpl: item.leads > 0 ? item.spend / item.leads : 0,
+      video_views: item.video_views || 0,
       avg_watch_time: item._watchTimeCount > 0 ? item._watchTimeSum / item._watchTimeCount : 0
     }));
 
@@ -107,7 +110,7 @@ export async function getDailyTrend(filters?: Filters): Promise<DailyTrend[]> {
 
     let query = supabase
       .from('ads_insights_daily')
-      .select('date, impressions, clicks, leads, spend, ctr, cvr, cpl, avg_watch_time');
+      .select('date, impressions, clicks, leads, spend, ctr, cvr, cpl, video_views, avg_watch_time');
 
     // 필터 적용
     if (filters?.clientId) {
@@ -155,6 +158,7 @@ export async function getDailyTrend(filters?: Filters): Promise<DailyTrend[]> {
           ctr: 0,
           cvr: 0,
           cpl: 0,
+          video_views: 0,
           avg_watch_time: 0,
           _watchTimeSum: 0,
           _watchTimeCount: 0
@@ -164,6 +168,7 @@ export async function getDailyTrend(filters?: Filters): Promise<DailyTrend[]> {
       acc[date].clicks += row.clicks || 0;
       acc[date].leads += row.leads || 0;
       acc[date].spend += row.spend || 0;
+      acc[date].video_views = (acc[date].video_views || 0) + (row.video_views || 0);
       if (row.avg_watch_time) {
         acc[date]._watchTimeSum += row.avg_watch_time;
         acc[date]._watchTimeCount += 1;
@@ -181,6 +186,7 @@ export async function getDailyTrend(filters?: Filters): Promise<DailyTrend[]> {
       ctr: item.impressions > 0 ? (item.clicks / item.impressions) * 100 : 0,
       cvr: item.clicks > 0 ? (item.leads / item.clicks) * 100 : 0,
       cpl: item.leads > 0 ? item.spend / item.leads : 0,
+      video_views: item.video_views || 0,
       avg_watch_time: item._watchTimeCount > 0 ? item._watchTimeSum / item._watchTimeCount : 0
     }));
 

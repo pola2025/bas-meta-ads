@@ -8,6 +8,7 @@ export interface DailyTrend {
   ctr: number;
   cvr: number;
   cpl: number;
+  video_views?: number; // 영상 조회수
   avg_watch_time?: number; // 평균 시청시간 (초)
 }
 

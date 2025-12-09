@@ -26,7 +26,7 @@ type PeriodOption = '7d' | '14d' | '30d';
 
 export function TrendChart({ data }: TrendChartProps) {
   const [period, setPeriod] = useState<PeriodOption>('7d');
-  const [metrics, setMetrics] = useState<('leads' | 'spend' | 'cpl')[]>(['leads', 'spend', 'cpl']);
+  const [metrics, setMetrics] = useState<('leads' | 'spend' | 'cpl' | 'video_views' | 'avg_watch_time')[]>(['leads', 'spend', 'cpl']);
 
   const periodDays = { '7d': 7, '14d': 14, '30d': 30 };
   const filteredData = data.slice(-periodDays[period]);
@@ -53,6 +53,8 @@ export function TrendChart({ data }: TrendChartProps) {
             <span className="font-medium text-gray-900">
               {entry.name === 'CPL' || entry.name === '지출'
                 ? `$${Math.round(entry.value || 0).toLocaleString('en-US')}`
+                : entry.name === '평균시청'
+                ? formatWatchTime(entry.value || 0)
                 : entry.value?.toLocaleString() || 0}
             </span>
           </div>
@@ -61,13 +63,22 @@ export function TrendChart({ data }: TrendChartProps) {
     );
   };
 
-  const toggleMetric = (metric: 'leads' | 'spend' | 'cpl') => {
+  const toggleMetric = (metric: 'leads' | 'spend' | 'cpl' | 'video_views' | 'avg_watch_time') => {
     setMetrics(prev => {
       if (prev.includes(metric)) {
         return prev.filter(m => m !== metric);
       }
       return [...prev, metric];
     });
+  };
+
+  // 시청시간 포맷 (초 -> mm:ss 또는 초)
+  const formatWatchTime = (seconds: number) => {
+    if (!seconds || seconds === 0) return '-';
+    if (seconds < 60) return `${seconds.toFixed(1)}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -129,6 +140,26 @@ export function TrendChart({ data }: TrendChartProps) {
         >
           <span className="mr-1.5">─</span>CPL
         </button>
+        <button
+          onClick={() => toggleMetric('video_views')}
+          className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+            metrics.includes('video_views')
+              ? 'bg-cyan-50 border-cyan-200 text-cyan-700'
+              : 'bg-gray-50 border-gray-200 text-gray-500'
+          }`}
+        >
+          <span className="mr-1.5">▶</span>영상조회
+        </button>
+        <button
+          onClick={() => toggleMetric('avg_watch_time')}
+          className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+            metrics.includes('avg_watch_time')
+              ? 'bg-pink-50 border-pink-200 text-pink-700'
+              : 'bg-gray-50 border-gray-200 text-gray-500'
+          }`}
+        >
+          <span className="mr-1.5">⏱</span>평균시청
+        </button>
       </div>
 
       {/* 차트 */}
@@ -189,6 +220,28 @@ export function TrendChart({ data }: TrendChartProps) {
               hide={true}
             />
 
+            {/* 영상 조회수 Y축 - 숨김 처리 */}
+            <YAxis
+              yAxisId="video_views"
+              orientation="right"
+              stroke="#06B6D4"
+              fontSize={11}
+              tickLine={false}
+              axisLine={false}
+              hide={true}
+            />
+
+            {/* 평균 시청시간 Y축 - 숨김 처리 */}
+            <YAxis
+              yAxisId="avg_watch_time"
+              orientation="right"
+              stroke="#EC4899"
+              fontSize={11}
+              tickLine={false}
+              axisLine={false}
+              hide={true}
+            />
+
             <Tooltip content={<CustomTooltip />} />
 
             <Legend
@@ -232,6 +285,32 @@ export function TrendChart({ data }: TrendChartProps) {
                 name="CPL"
                 dot={{ fill: '#F59E0B', r: 4, strokeWidth: 2, stroke: '#fff' }}
                 activeDot={{ r: 6, strokeWidth: 2, stroke: '#fff' }}
+              />
+            )}
+
+            {metrics.includes('video_views') && (
+              <Line
+                yAxisId="video_views"
+                type="monotone"
+                dataKey="video_views"
+                stroke="#06B6D4"
+                strokeWidth={2}
+                name="영상조회"
+                dot={{ fill: '#06B6D4', r: 3, strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }}
+              />
+            )}
+
+            {metrics.includes('avg_watch_time') && (
+              <Line
+                yAxisId="avg_watch_time"
+                type="monotone"
+                dataKey="avg_watch_time"
+                stroke="#EC4899"
+                strokeWidth={2}
+                name="평균시청"
+                dot={{ fill: '#EC4899', r: 3, strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }}
               />
             )}
           </ComposedChart>
