@@ -218,7 +218,7 @@ export function PeriodDataTable({ data }: PeriodDataTableProps) {
   };
 
   // 숫자 포맷
-  const formatCurrency = (num: number) => `₩${Math.round(num).toLocaleString('ko-KR')}`;
+  const formatCurrency = (num: number) => `$${Math.round(num).toLocaleString('en-US')}`;
   const formatNumber = (num: number) => num.toLocaleString('ko-KR');
   const formatPercentage = (num: number) => `${num.toFixed(2)}%`;
   const formatWatchTime = (seconds: number) => {

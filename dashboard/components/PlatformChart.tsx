@@ -56,7 +56,7 @@ export function PlatformChart({ data, dateRange }: PlatformChartProps) {
       <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200">
         <p className="font-semibold text-gray-900">{data.name}</p>
         <p className="text-sm text-gray-600">
-          지출: ₩{data.value.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
+          지출: ${data.value.toLocaleString('en-US', { maximumFractionDigits: 0 })}
         </p>
         <p className="text-sm text-gray-600">
           비율: {data.percentage.toFixed(1)}%
@@ -106,7 +106,7 @@ export function PlatformChart({ data, dateRange }: PlatformChartProps) {
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <p className="text-xs text-gray-500">총 지출</p>
               <p className="text-sm font-bold text-gray-900">
-                ₩{totalSpend >= 10000 ? `${(totalSpend / 10000).toFixed(1)}만` : totalSpend.toLocaleString()}
+                ${totalSpend >= 1000 ? `${(totalSpend / 1000).toFixed(1)}k` : totalSpend.toLocaleString()}
               </p>
             </div>
           </div>
@@ -155,7 +155,7 @@ export function PlatformChart({ data, dateRange }: PlatformChartProps) {
                     {platform.leads.toLocaleString()}
                   </td>
                   <td className="py-2 text-right text-gray-700">
-                    ₩{platform.spend.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
+                    ${platform.spend.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                   </td>
                   <td className="py-2 text-right">
                     <span className={`font-medium ${
@@ -163,7 +163,7 @@ export function PlatformChart({ data, dateRange }: PlatformChartProps) {
                         ? 'text-green-600'
                         : 'text-gray-900'
                     }`}>
-                      {platform.leads > 0 ? `₩${platform.cpl.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}` : '-'}
+                      {platform.leads > 0 ? `$${platform.cpl.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '-'}
                     </span>
                   </td>
                 </tr>
@@ -174,10 +174,10 @@ export function PlatformChart({ data, dateRange }: PlatformChartProps) {
                 <td className="py-2 text-gray-900">합계</td>
                 <td className="py-2 text-right text-gray-900">{totalLeads.toLocaleString()}</td>
                 <td className="py-2 text-right text-gray-900">
-                  ₩{totalSpend.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
+                  ${totalSpend.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                 </td>
                 <td className="py-2 text-right text-gray-900">
-                  ₩{totalLeads > 0 ? Math.round(totalSpend / totalLeads).toLocaleString('ko-KR') : '-'}
+                  ${totalLeads > 0 ? Math.round(totalSpend / totalLeads).toLocaleString('en-US') : '-'}
                 </td>
               </tr>
             </tfoot>
@@ -190,7 +190,7 @@ export function PlatformChart({ data, dateRange }: PlatformChartProps) {
                 <span className="text-green-600 text-sm">⭐</span>
                 <span className="text-xs text-green-800">
                   <strong>{PLATFORM_NAMES[bestPlatform.platform] || bestPlatform.platform}</strong>
-                  {' '}효율 최고 (CPL ₩{bestPlatform.cpl.toLocaleString('ko-KR', { maximumFractionDigits: 0 })})
+                  {' '}효율 최고 (CPL ${bestPlatform.cpl.toLocaleString('en-US', { maximumFractionDigits: 0 })})
                 </span>
               </div>
             </div>

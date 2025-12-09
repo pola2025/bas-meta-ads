@@ -33,7 +33,7 @@ export function KPICard({
 
     switch (format) {
       case 'currency':
-        return `₩${val.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}`;
+        return `$${val.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
       case 'percentage':
         return `${val.toFixed(2)}%`;
       default:

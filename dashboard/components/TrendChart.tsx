@@ -52,7 +52,7 @@ export function TrendChart({ data }: TrendChartProps) {
             <span className="text-gray-600">{entry.name}:</span>
             <span className="font-medium text-gray-900">
               {entry.name === 'CPL' || entry.name === '지출'
-                ? `₩${Math.round(entry.value || 0).toLocaleString('ko-KR')}`
+                ? `$${Math.round(entry.value || 0).toLocaleString('en-US')}`
                 : entry.value?.toLocaleString() || 0}
             </span>
           </div>
@@ -175,7 +175,7 @@ export function TrendChart({ data }: TrendChartProps) {
               fontSize={11}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(val) => `₩${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val}`}
+              tickFormatter={(val) => `$${val >= 1000 ? `${(val/1000).toFixed(0)}k` : val}`}
             />
 
             {/* 오른쪽 Y축 2: CPL ($) - 숨김 처리, 지출과 스케일 공유 */}
@@ -250,13 +250,13 @@ export function TrendChart({ data }: TrendChartProps) {
           <div className="text-center">
             <p className="text-xs text-gray-500">총 지출</p>
             <p className="text-lg font-semibold text-gray-900">
-              ₩{chartData.reduce((sum, d) => sum + d.spend, 0).toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
+              ${chartData.reduce((sum, d) => sum + d.spend, 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}
             </p>
           </div>
           <div className="text-center">
             <p className="text-xs text-gray-500">평균 CPL</p>
             <p className="text-lg font-semibold text-gray-900">
-              ₩{Math.round(chartData.reduce((sum, d) => sum + d.spend, 0) / Math.max(chartData.reduce((sum, d) => sum + d.leads, 0), 1)).toLocaleString('ko-KR')}
+              ${Math.round(chartData.reduce((sum, d) => sum + d.spend, 0) / Math.max(chartData.reduce((sum, d) => sum + d.leads, 0), 1)).toLocaleString('en-US')}
             </p>
           </div>
         </div>

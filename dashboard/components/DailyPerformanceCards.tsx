@@ -62,7 +62,7 @@ export function DailyPerformanceCards({ data, metric = 'leads' }: DailyPerforman
 
   const formatCPL = (value: number) => {
     if (value === 0) return '-';
-    return `₩${value.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}`;
+    return `$${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
   };
 
   return (

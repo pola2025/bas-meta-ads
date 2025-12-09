@@ -276,6 +276,25 @@ async function generateAIInsights(reportData) {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' });
 
+  // 영상 데이터 요약 계산
+  const videoData = {
+    totalViews: 0,
+    avgWatchTime: 0,
+    count: 0
+  };
+  if (reportData.thisWeekData) {
+    reportData.thisWeekData.forEach(row => {
+      videoData.totalViews += row.video_views || 0;
+      if (row.avg_watch_time > 0) {
+        videoData.avgWatchTime += row.avg_watch_time;
+        videoData.count += 1;
+      }
+    });
+    if (videoData.count > 0) {
+      videoData.avgWatchTime = videoData.avgWatchTime / videoData.count;
+    }
+  }
+
   const prompt = `
 당신은 Meta 광고 성과를 분석하는 마케팅 전문가입니다.
 다음 데이터를 분석하여 실행 가능한 인사이트를 제공해주세요.
@@ -286,9 +305,14 @@ async function generateAIInsights(reportData) {
 - 지난 주: 리드 ${reportData.lastStats.leads}건, CPL $${reportData.lastStats.cpl.toFixed(2)}, CTR ${reportData.lastStats.ctr.toFixed(2)}%, 지출 $${reportData.lastStats.spend.toFixed(2)}
 - 이번 주: 리드 ${reportData.thisStats.leads}건, CPL $${reportData.thisStats.cpl.toFixed(2)}, CTR ${reportData.thisStats.ctr.toFixed(2)}%, 지출 $${reportData.thisStats.spend.toFixed(2)}
 
+### 영상 성과 (이번 주)
+- 총 영상 조회수: ${videoData.totalViews.toLocaleString()}회
+- 평균 시청 시간: ${videoData.avgWatchTime.toFixed(1)}초
+${videoData.totalViews > 0 ? `- 시청당 비용: $${(reportData.thisStats.spend / videoData.totalViews).toFixed(4)}` : ''}
+
 ### 광고별 성과 (TOP 3)
 ${reportData.adPerformance.slice(0, 3).map((ad, idx) =>
-  `${idx + 1}. ${ad.ad_name}: 리드 ${ad.leads}건, CPL $${ad.cpl.toFixed(2)}, CTR ${ad.ctr.toFixed(2)}%`
+  `${idx + 1}. ${ad.ad_name}: 리드 ${ad.leads}건, CPL $${ad.cpl ? ad.cpl.toFixed(2) : '-'}, CTR ${ad.ctr.toFixed(2)}%`
 ).join('\n')}
 
 ### 캠페인별 성과
@@ -301,12 +325,13 @@ ${reportData.campaignPerformance.map(camp =>
 다음 형식으로 응답해주세요:
 
 📊 성과 종합 분석
-[2-3문장으로 전주 대비 변화, 주요 패턴 설명]
+[2-3문장으로 전주 대비 변화, 주요 패턴 설명. 영상 조회수와 시청시간 데이터가 있으면 이에 대한 분석도 포함]
 
 💡 핵심 인사이트 (5-7개)
 1. [인사이트 1: 구체적 수치 포함]
 2. [인사이트 2]
 ...
+(영상 성과가 있는 경우 시청시간과 조회수에 대한 인사이트도 포함)
 
 🎯 즉시 실행 가능한 액션 (3-5개)
 1. ✅ [액션 제목]
@@ -536,15 +561,29 @@ async function generateAndSendReport(client, dates, forceResend = false) {
         const dailyMap = {};
         thisWeekData.forEach(row => {
           if (!dailyMap[row.date]) {
-            dailyMap[row.date] = { date: row.date, leads: 0, spend: 0, impressions: 0, clicks: 0 };
+            dailyMap[row.date] = { date: row.date, leads: 0, spend: 0, impressions: 0, clicks: 0, video_views: 0, avg_watch_time_sum: 0, avg_watch_time_count: 0 };
           }
           dailyMap[row.date].leads += row.leads || 0;
           dailyMap[row.date].spend += parseFloat(row.spend) || 0;
           dailyMap[row.date].impressions += row.impressions || 0;
           dailyMap[row.date].clicks += row.clicks || 0;
+          dailyMap[row.date].video_views += row.video_views || 0;
+          if (row.avg_watch_time > 0) {
+            dailyMap[row.date].avg_watch_time_sum += row.avg_watch_time;
+            dailyMap[row.date].avg_watch_time_count += 1;
+          }
         });
         Object.keys(dailyMap).sort().forEach(date => {
-          dailyStats.push(dailyMap[date]);
+          const d = dailyMap[date];
+          dailyStats.push({
+            date: d.date,
+            leads: d.leads,
+            spend: d.spend,
+            impressions: d.impressions,
+            clicks: d.clicks,
+            video_views: d.video_views,
+            avg_watch_time: d.avg_watch_time_count > 0 ? d.avg_watch_time_sum / d.avg_watch_time_count : 0
+          });
         });
       }
 
@@ -604,15 +643,29 @@ async function generateAndSendReport(client, dates, forceResend = false) {
         const dailyMap = {};
         thisWeekData.forEach(row => {
           if (!dailyMap[row.date]) {
-            dailyMap[row.date] = { date: row.date, leads: 0, spend: 0, impressions: 0, clicks: 0 };
+            dailyMap[row.date] = { date: row.date, leads: 0, spend: 0, impressions: 0, clicks: 0, video_views: 0, avg_watch_time_sum: 0, avg_watch_time_count: 0 };
           }
           dailyMap[row.date].leads += row.leads || 0;
           dailyMap[row.date].spend += parseFloat(row.spend) || 0;
           dailyMap[row.date].impressions += row.impressions || 0;
           dailyMap[row.date].clicks += row.clicks || 0;
+          dailyMap[row.date].video_views += row.video_views || 0;
+          if (row.avg_watch_time > 0) {
+            dailyMap[row.date].avg_watch_time_sum += row.avg_watch_time;
+            dailyMap[row.date].avg_watch_time_count += 1;
+          }
         });
         Object.keys(dailyMap).sort().forEach(date => {
-          dailyStats.push(dailyMap[date]);
+          const d = dailyMap[date];
+          dailyStats.push({
+            date: d.date,
+            leads: d.leads,
+            spend: d.spend,
+            impressions: d.impressions,
+            clicks: d.clicks,
+            video_views: d.video_views,
+            avg_watch_time: d.avg_watch_time_count > 0 ? d.avg_watch_time_sum / d.avg_watch_time_count : 0
+          });
         });
       }
 

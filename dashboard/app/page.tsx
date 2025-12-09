@@ -436,7 +436,7 @@ export default function Home() {
                 title: '주의 필요',
                 content: kpi.avg_cpl > 0
                   ? kpi.avg_cpl > 30000
-                    ? `CPL ₩${Math.round(kpi.avg_cpl).toLocaleString()} 높음`
+                    ? `CPL $${Math.round(kpi.avg_cpl).toLocaleString()} 높음`
                     : dailyTrend.length > 0 && Math.min(...dailyTrend.filter(d => d.leads > 0).map(d => d.leads)) < 3
                     ? '일부 일자 리드 저조'
                     : '특이사항 없음'
@@ -453,7 +453,7 @@ export default function Home() {
               }}
               summaryText={
                 kpi.total_leads > 0
-                  ? `이번 기간 <strong>총 광고비 ₩${kpi.total_spend.toLocaleString()}</strong>으로 <strong>리드 ${kpi.total_leads}건</strong>을 확보했습니다. 평균 CPL은 <strong>₩${Math.round(kpi.avg_cpl).toLocaleString()}</strong>입니다.`
+                  ? `이번 기간 <strong>총 광고비 $${kpi.total_spend.toLocaleString()}</strong>으로 <strong>리드 ${kpi.total_leads}건</strong>을 확보했습니다. 평균 CPL은 <strong>$${Math.round(kpi.avg_cpl).toLocaleString()}</strong>입니다.`
                   : undefined
               }
             />
@@ -628,8 +628,8 @@ export default function Home() {
                               {
                                 icon: '✓',
                                 text: kpi.avg_cpl < 25000
-                                  ? `CPL <strong>₩${Math.round(kpi.avg_cpl).toLocaleString()}</strong>으로 효율적 운영 중`
-                                  : `CPL <strong>₩${Math.round(kpi.avg_cpl).toLocaleString()}</strong> - 최적화 검토 필요`,
+                                  ? `CPL <strong>$${Math.round(kpi.avg_cpl).toLocaleString()}</strong>으로 효율적 운영 중`
+                                  : `CPL <strong>$${Math.round(kpi.avg_cpl).toLocaleString()}</strong> - 최적화 검토 필요`,
                                 type: kpi.avg_cpl < 25000 ? 'success' : 'warning'
                               },
                               {

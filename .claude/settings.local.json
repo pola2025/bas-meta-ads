@@ -103,7 +103,9 @@
       "mcp__playwright__playwright_select",
       "mcp__playwright__playwright_get_visible_html",
       "mcp__playwright__playwright_evaluate",
-      "Bash(railway up:*)"
+      "Bash(railway up:*)",
+      "mcp__playwright__playwright_console_logs",
+      "mcp__playwright__playwright_click"
     ],
     "deny": [],
     "ask": []

@@ -106,7 +106,7 @@ export function AdProfileCard({
       }));
 
   // 숫자 포맷
-  const formatCurrency = (num: number) => `₩${Math.round(num).toLocaleString('ko-KR')}`;
+  const formatCurrency = (num: number) => `$${Math.round(num).toLocaleString('en-US')}`;
   const formatNumber = (num: number) => num.toLocaleString('ko-KR');
   const formatPercentage = (num: number) => `${num.toFixed(2)}%`;
 
@@ -296,7 +296,7 @@ export function AdProfileCard({
                         axisLine={{ stroke: '#E5E7EB' }}
                         tickFormatter={(value) =>
                           selectedMetric === 'cpl' || selectedMetric === 'spend'
-                            ? `₩${value >= 1000 ? `${(value/1000).toFixed(0)}k` : value}`
+                            ? `$${value >= 1000 ? `${(value/1000).toFixed(0)}k` : value}`
                             : selectedMetric === 'ctr'
                             ? `${value}%`
                             : value

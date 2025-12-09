@@ -79,7 +79,7 @@ export function AdsDetailTable({ data, onAdClick }: AdsDetailTableProps) {
   }
 
   const formatCurrency = (num: number) => {
-    return `₩${Math.round(num).toLocaleString('ko-KR')}`
+    return `$${Math.round(num).toLocaleString('en-US')}`
   }
 
   const formatPercentage = (num: number) => {
@@ -225,7 +225,7 @@ export function AdsDetailTable({ data, onAdClick }: AdsDetailTableProps) {
                 <span className={`text-[11px] font-bold text-right ${
                   ad.cpl > 20000 ? 'text-orange-600' : ad.cpl > 0 ? 'text-green-600' : 'text-gray-400'
                 }`}>
-                  {ad.cpl > 0 ? `₩${Math.round(ad.cpl).toLocaleString('ko-KR')}` : '-'}
+                  {ad.cpl > 0 ? `$${Math.round(ad.cpl).toLocaleString('en-US')}` : '-'}
                 </span>
               </div>
 
