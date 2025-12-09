@@ -67,9 +67,17 @@ export function DailyPerformanceCards({ data, metric = 'leads' }: DailyPerforman
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <div className="flex items-center gap-2 text-lg font-bold text-gray-800 mb-4">
-        <span>📅</span>
-        <span>일별 성과 추이</span>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2 text-lg font-bold text-gray-800">
+          <span>📅</span>
+          <span>일별 성과 추이</span>
+        </div>
+        {/* 모바일 스크롤 힌트 */}
+        <span className="text-xs text-gray-400 sm:hidden flex items-center gap-1">
+          <span>←</span>
+          <span>스크롤</span>
+          <span>→</span>
+        </span>
       </div>
 
       {/* 일별 카드 - 모바일: 가로 스크롤, 데스크탑: 7열 그리드 */}
