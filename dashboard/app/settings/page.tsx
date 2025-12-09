@@ -2,12 +2,28 @@
 
 import { Header } from '@/components/Header'
 import { TelegramSettings } from '@/components/TelegramSettings'
-import { Settings as SettingsIcon, Users, ExternalLink } from 'lucide-react'
+import { Settings as SettingsIcon, Users, ExternalLink, ArrowLeft } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 
 export default function SettingsPage() {
   const searchParams = useSearchParams()
   const adminKey = process.env.NEXT_PUBLIC_ADMIN_KEY
+
+  // URL 파라미터에서 대시보드 복귀용 정보 추출
+  const admin = searchParams.get('admin')
+  const start = searchParams.get('start')
+  const end = searchParams.get('end')
+
+  // 대시보드로 돌아가는 URL 생성
+  const getDashboardUrl = () => {
+    const params = new URLSearchParams()
+    if (admin) params.set('admin', admin)
+    if (start) params.set('start', start)
+    if (end) params.set('end', end)
+    const queryString = params.toString()
+    return queryString ? `/?${queryString}` : '/'
+  }
 
   const handleSaveSettings = async (config: any) => {
     try {
@@ -35,9 +51,19 @@ export default function SettingsPage() {
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
-          <div className="flex items-center gap-3">
-            <SettingsIcon className="w-8 h-8 text-neutral-700" />
-            <h1 className="text-3xl font-bold text-neutral-900">설정</h1>
+          {/* 상단 네비게이션 */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <SettingsIcon className="w-8 h-8 text-neutral-700" />
+              <h1 className="text-3xl font-bold text-neutral-900">설정</h1>
+            </div>
+            <Link
+              href={getDashboardUrl()}
+              className="inline-flex items-center gap-2 px-4 py-2 text-neutral-600 bg-neutral-100 rounded-lg hover:bg-neutral-200 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>대시보드로 돌아가기</span>
+            </Link>
           </div>
 
           <TelegramSettings onSave={handleSaveSettings} />

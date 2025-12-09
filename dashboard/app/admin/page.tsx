@@ -41,6 +41,7 @@ import {
   CalendarCheck,
   UserCheck,
   Info,
+  ArrowLeft,
 } from 'lucide-react';
 import {
   ComposedChart,
@@ -226,6 +227,18 @@ const initialFormData = {
 export default function AdminPage() {
   const searchParams = useSearchParams();
   const adminKey = searchParams.get('admin');
+  const startParam = searchParams.get('start');
+  const endParam = searchParams.get('end');
+
+  // 대시보드로 돌아가는 URL 생성
+  const getDashboardUrl = () => {
+    const params = new URLSearchParams();
+    if (adminKey) params.set('admin', adminKey);
+    if (startParam) params.set('start', startParam);
+    if (endParam) params.set('end', endParam);
+    const queryString = params.toString();
+    return queryString ? `/?${queryString}` : '/';
+  };
 
   const [clients, setClients] = useState<Client[]>([]);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
@@ -1053,6 +1066,13 @@ export default function AdminPage() {
             <h1 className="text-xl font-bold text-neutral-900">BAS Meta Ads - Admin</h1>
           </div>
           <div className="flex items-center gap-3">
+            <Link
+              href={getDashboardUrl()}
+              className="flex items-center gap-2 px-3 py-2 text-neutral-600 bg-neutral-100 rounded-lg hover:bg-neutral-200 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span className="hidden sm:inline">대시보드</span>
+            </Link>
             <button
               onClick={fetchData}
               className="p-2 text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors"
@@ -2604,6 +2624,17 @@ export default function AdminPage() {
                       ? `✅ 백필 완료! 총 ${backfillResult.totalRecords?.toLocaleString()}건 수집, ${backfillResult.savedRecords?.toLocaleString()}건 저장`
                       : '❌ 백필 실패. 로그를 확인하세요.'}
                   </p>
+                  {backfillResult.success && backfillClient && (
+                    <a
+                      href={`/?client=${backfillClient.slug || backfillClient.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      대시보드에서 확인하기
+                    </a>
+                  )}
                 </div>
               )}
 
