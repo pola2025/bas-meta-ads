@@ -72,35 +72,37 @@ export function DailyPerformanceCards({ data, metric = 'leads' }: DailyPerforman
         <span>일별 성과 추이</span>
       </div>
 
-      {/* 일별 카드 그리드 */}
-      <div className="grid grid-cols-7 gap-2">
-        {last7Days.map((day) => {
-          const dateObj = parseISO(day.date);
-          const dateStr = format(dateObj, 'MM/dd');
+      {/* 일별 카드 - 모바일: 가로 스크롤, 데스크탑: 7열 그리드 */}
+      <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0 sm:overflow-visible">
+        <div className="flex gap-2 sm:grid sm:grid-cols-7 min-w-max sm:min-w-0">
+          {last7Days.map((day) => {
+            const dateObj = parseISO(day.date);
+            const dateStr = format(dateObj, 'MM/dd');
 
-          return (
-            <div
-              key={day.date}
-              className={`rounded-lg p-3 text-center border transition-all ${getCardStyle(day)}`}
-            >
-              <div className="text-xs text-gray-500 mb-1">{dateStr}</div>
-              <div className="mb-2">{getDayLabel(day)}</div>
+            return (
+              <div
+                key={day.date}
+                className={`rounded-lg p-3 text-center border transition-all min-w-[72px] sm:min-w-0 ${getCardStyle(day)}`}
+              >
+                <div className="text-xs text-gray-500 mb-1">{dateStr}</div>
+                <div className="mb-2">{getDayLabel(day)}</div>
 
-              {/* 리드 수 */}
-              <div className="text-lg font-bold text-gray-900">{day.leads}</div>
-              <div className="text-xs text-gray-500">리드</div>
+                {/* 리드 수 */}
+                <div className="text-lg font-bold text-gray-900">{day.leads}</div>
+                <div className="text-xs text-gray-500">리드</div>
 
-              {/* CPL */}
-              <div className={`text-sm font-medium mt-1 ${
-                day.cpl > 0 && day.date === bestDay?.date ? 'text-green-600' :
-                day.cpl > 0 && day.date === worstDay?.date && day.date !== bestDay?.date ? 'text-red-600' :
-                'text-gray-600'
-              }`}>
-                {formatCPL(day.cpl)}
+                {/* CPL */}
+                <div className={`text-sm font-medium mt-1 ${
+                  day.cpl > 0 && day.date === bestDay?.date ? 'text-green-600' :
+                  day.cpl > 0 && day.date === worstDay?.date && day.date !== bestDay?.date ? 'text-red-600' :
+                  'text-gray-600'
+                }`}>
+                  {formatCPL(day.cpl)}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {/* 인사이트 박스 */}
