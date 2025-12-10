@@ -105,7 +105,8 @@
       "mcp__playwright__playwright_evaluate",
       "Bash(railway up:*)",
       "mcp__playwright__playwright_console_logs",
-      "mcp__playwright__playwright_click"
+      "mcp__playwright__playwright_click",
+      "mcp__playwright__playwright_close"
     ],
     "deny": [],
     "ask": []

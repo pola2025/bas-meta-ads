@@ -22,6 +22,7 @@ import { ExecutiveSummary } from '@/components/ExecutiveSummary';
 import { DailyPerformanceCards } from '@/components/DailyPerformanceCards';
 import { AIInsightBox } from '@/components/AIInsightBox';
 import { WeeklyComparisonTable } from '@/components/WeeklyComparisonTable';
+import { AdManagementTab } from '@/components/AdManagementTab';
 import { TrendingUp, DollarSign, Target, MousePointerClick, Lock, Clock } from 'lucide-react';
 import {
   getKPISummary,
@@ -684,6 +685,17 @@ export default function Home() {
                       {selectedAd && !showProfileCard && (
                         <AdTrendChartWithData ad={selectedAd} />
                       )}
+                    </div>
+                  )
+                },
+                {
+                  id: 'ad-management',
+                  label: '광고 관리',
+                  content: effectiveClientId ? (
+                    <AdManagementTab clientId={effectiveClientId} />
+                  ) : (
+                    <div className="text-center py-12 text-gray-500">
+                      클라이언트를 선택해주세요.
                     </div>
                   )
                 }

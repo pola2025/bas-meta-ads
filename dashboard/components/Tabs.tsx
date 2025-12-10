@@ -19,7 +19,8 @@ interface TabsProps {
 const tabIcons: Record<string, string> = {
   'overview': '📊',
   'period-data': '📅',
-  'ads-detail': '📋'
+  'ads-detail': '📋',
+  'ad-management': '⚡'
 }
 
 export function Tabs({ tabs, activeTab, onChange }: TabsProps) {
@@ -27,7 +28,7 @@ export function Tabs({ tabs, activeTab, onChange }: TabsProps) {
     <div className="w-full">
       {/* 모바일: 블록형 버튼 그리드 */}
       <div className="block md:hidden">
-        <div className="grid grid-cols-3 gap-1.5 p-1.5 bg-gray-100 rounded-xl">
+        <div className={`grid gap-1.5 p-1.5 bg-gray-100 rounded-xl ${tabs.length <= 3 ? 'grid-cols-3' : 'grid-cols-4'}`}>
           {tabs.map((tab) => (
             <button
               key={tab.id}
