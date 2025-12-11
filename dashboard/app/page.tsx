@@ -403,6 +403,8 @@ export default function Home() {
               avgCpl={kpi.avg_cpl}
               showSparkline={false}
               clientId={effectiveClientId || undefined}
+              startDate={filters.startDate || format(primaryRange.from, 'yyyy-MM-dd')}
+              endDate={filters.endDate || format(primaryRange.to, 'yyyy-MM-dd')}
             />
           </section>
 
@@ -682,6 +684,8 @@ export default function Home() {
                         data={allAds}
                         onAdClick={handleAdClick}
                         clientId={effectiveClientId || undefined}
+                        startDate={filters.startDate || format(primaryRange.from, 'yyyy-MM-dd')}
+                        endDate={filters.endDate || format(primaryRange.to, 'yyyy-MM-dd')}
                       />
 
                       {selectedAd && !showProfileCard && (

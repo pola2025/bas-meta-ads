@@ -11,24 +11,27 @@ interface AdsDetailTableProps {
   data: AdWithStatus[]
   onAdClick?: (ad: TopAd) => void
   clientId?: string
+  startDate?: string
+  endDate?: string
 }
 
 type SortKey = 'ad_name' | 'spend' | 'impressions' | 'clicks' | 'cpc' | 'leads' | 'cpl' | 'ctr' | 'cvr' | 'isActive' | 'lastActiveDate' | 'avg_watch_time'
 type SortDirection = 'asc' | 'desc'
 
-export function AdsDetailTable({ data, onAdClick, clientId }: AdsDetailTableProps) {
+export function AdsDetailTable({ data, onAdClick, clientId, startDate, endDate }: AdsDetailTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>('isActive')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [expandedAdId, setExpandedAdId] = useState<string | null>(null)
   const [showInactive, setShowInactive] = useState(true)
   const [platformLeads, setPlatformLeads] = useState<Map<string, AdPlatformLeads>>(new Map())
 
-  // 플랫폼별 리드 데이터 로드
+  // 플랫폼별 리드 데이터 로드 (날짜 필터 적용)
   useEffect(() => {
     if (clientId) {
-      getAdPlatformLeads(clientId).then(setPlatformLeads)
+      const filters = startDate && endDate ? { startDate, endDate } : undefined
+      getAdPlatformLeads(clientId, filters).then(setPlatformLeads)
     }
-  }, [clientId])
+  }, [clientId, startDate, endDate])
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {

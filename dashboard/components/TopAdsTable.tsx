@@ -12,6 +12,8 @@ interface TopAdsTableProps {
   showSparkline?: boolean;
   sparklineData?: Record<string, number[]>;  // ad_id -> 7일 CPL 추이
   clientId?: string;
+  startDate?: string;  // 날짜 필터 (FB/IG 리드 조회용)
+  endDate?: string;
 }
 
 // 순위 뱃지 컴포넌트 (컴팩트)
@@ -151,17 +153,20 @@ export function TopAdsTable({
   avgCpl,
   showSparkline = false,  // 기본값 false로 변경 (모바일 대응)
   sparklineData,
-  clientId
+  clientId,
+  startDate,
+  endDate
 }: TopAdsTableProps) {
   const [sortBy, setSortBy] = useState<'cpl' | 'leads' | 'spend'>('cpl');
   const [platformLeads, setPlatformLeads] = useState<Map<string, AdPlatformLeads>>(new Map());
 
-  // 플랫폼별 리드 데이터 로드
+  // 플랫폼별 리드 데이터 로드 (날짜 필터 적용)
   useEffect(() => {
     if (clientId) {
-      getAdPlatformLeads(clientId).then(setPlatformLeads);
+      const filters = startDate && endDate ? { startDate, endDate } : undefined;
+      getAdPlatformLeads(clientId, filters).then(setPlatformLeads);
     }
-  }, [clientId]);
+  }, [clientId, startDate, endDate]);
 
   // 정렬된 데이터
   const sortedData = [...data].sort((a, b) => {
