@@ -16,14 +16,20 @@ interface AdsDetailTableProps {
 }
 
 // 광고별 상세용 날짜 필터 컴포넌트
-type AdsDateFilterValue = 'all' | '7d' | '30d' | '60d' | '90d'
+type AdsDateFilterValue = 'all' | '7d' | '30d' | '60d' | '90d' | 'custom'
 
 function AdsDateFilter({
   value,
-  onChange
+  onChange,
+  customStart,
+  customEnd,
+  onCustomDateChange
 }: {
   value: AdsDateFilterValue
   onChange: (value: AdsDateFilterValue) => void
+  customStart?: string
+  customEnd?: string
+  onCustomDateChange?: (start: string, end: string) => void
 }) {
   const options: { value: AdsDateFilterValue; label: string }[] = [
     { value: 'all', label: '전체' },
@@ -34,20 +40,52 @@ function AdsDateFilter({
   ]
 
   return (
-    <div className="flex gap-1 flex-wrap">
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          onClick={() => onChange(opt.value)}
-          className={`px-2 py-1 text-xs rounded-md transition-colors ${
-            value === opt.value
-              ? 'bg-blue-500 text-white'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+    <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex gap-1 flex-wrap">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
+            className={`px-2 py-1 text-xs rounded-md transition-colors ${
+              value === opt.value
+                ? 'bg-blue-500 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      {/* 달력 입력 */}
+      <div className="flex items-center gap-1">
+        <input
+          type="date"
+          value={customStart || ''}
+          onChange={(e) => {
+            if (onCustomDateChange && customEnd) {
+              onCustomDateChange(e.target.value, customEnd)
+            }
+          }}
+          onClick={() => onChange('custom')}
+          className={`px-2 py-1 text-xs border rounded-md ${
+            value === 'custom' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
           }`}
-        >
-          {opt.label}
-        </button>
-      ))}
+        />
+        <span className="text-xs text-gray-400">~</span>
+        <input
+          type="date"
+          value={customEnd || ''}
+          onChange={(e) => {
+            if (onCustomDateChange && customStart) {
+              onCustomDateChange(customStart, e.target.value)
+            }
+          }}
+          onClick={() => onChange('custom')}
+          className={`px-2 py-1 text-xs border rounded-md ${
+            value === 'custom' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+          }`}
+        />
+      </div>
     </div>
   )
 }
@@ -65,6 +103,11 @@ export function AdsDetailTable({ data, onAdClick, clientId, startDate, endDate }
   // 광고별 상세 전용 날짜 필터 (기본: 전체)
   const [adsDateFilter, setAdsDateFilter] = useState<AdsDateFilterValue>('all')
 
+  // 커스텀 날짜 범위
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const [customStartDate, setCustomStartDate] = useState<string>('2025-01-01')
+  const [customEndDate, setCustomEndDate] = useState<string>(today)
+
   // 날짜 필터에 따른 일수 계산
   const getFilterDays = (filter: AdsDateFilterValue): number | null => {
     switch (filter) {
@@ -79,22 +122,31 @@ export function AdsDetailTable({ data, onAdClick, clientId, startDate, endDate }
   // 플랫폼별 리드 데이터 로드 (날짜 필터에 따라)
   useEffect(() => {
     if (clientId) {
-      const days = getFilterDays(adsDateFilter)
       let filters: { startDate: string; endDate: string } | undefined
 
-      if (days !== null) {
-        const end = new Date()
-        const start = subDays(end, days)
+      if (adsDateFilter === 'custom') {
+        // 커스텀 날짜 범위 사용
         filters = {
-          startDate: format(start, 'yyyy-MM-dd'),
-          endDate: format(end, 'yyyy-MM-dd')
+          startDate: customStartDate,
+          endDate: customEndDate
+        }
+      } else if (adsDateFilter !== 'all') {
+        // 프리셋 기간 사용
+        const days = getFilterDays(adsDateFilter)
+        if (days !== null) {
+          const end = new Date()
+          const start = subDays(end, days)
+          filters = {
+            startDate: format(start, 'yyyy-MM-dd'),
+            endDate: format(end, 'yyyy-MM-dd')
+          }
         }
       }
       // 'all'이면 filters는 undefined로 전체 기간 조회
 
       getAdPlatformLeads(clientId, filters).then(setPlatformLeads)
     }
-  }, [clientId, adsDateFilter])
+  }, [clientId, adsDateFilter, customStartDate, customEndDate])
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -229,7 +281,17 @@ export function AdsDetailTable({ data, onAdClick, clientId, startDate, endDate }
               </p>
             </div>
             {/* 날짜 필터 */}
-            <AdsDateFilter value={adsDateFilter} onChange={setAdsDateFilter} />
+            <AdsDateFilter
+              value={adsDateFilter}
+              onChange={setAdsDateFilter}
+              customStart={customStartDate}
+              customEnd={customEndDate}
+              onCustomDateChange={(start, end) => {
+                setCustomStartDate(start)
+                setCustomEndDate(end)
+                setAdsDateFilter('custom')
+              }}
+            />
           </div>
           <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
             <input
@@ -278,7 +340,17 @@ export function AdsDetailTable({ data, onAdClick, clientId, startDate, endDate }
             </div>
           </div>
           {/* 모바일 날짜 필터 */}
-          <AdsDateFilter value={adsDateFilter} onChange={setAdsDateFilter} />
+          <AdsDateFilter
+            value={adsDateFilter}
+            onChange={setAdsDateFilter}
+            customStart={customStartDate}
+            customEnd={customEndDate}
+            onCustomDateChange={(start, end) => {
+              setCustomStartDate(start)
+              setCustomEndDate(end)
+              setAdsDateFilter('custom')
+            }}
+          />
         </div>
       </div>
 
