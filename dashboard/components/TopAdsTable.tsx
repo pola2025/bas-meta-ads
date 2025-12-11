@@ -1,14 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
 import { TopAd } from '@/types/analytics';
+import { AdPlatformLeads, getAdPlatformLeads } from '@/lib/api';
+import { Instagram } from 'lucide-react';
 
 interface TopAdsTableProps {
   data: TopAd[];
   avgCpl?: number;  // 평균 CPL (상태 표시용)
   showSparkline?: boolean;
   sparklineData?: Record<string, number[]>;  // ad_id -> 7일 CPL 추이
+  clientId?: string;
 }
 
 // 순위 뱃지 컴포넌트 (컴팩트)
@@ -57,31 +60,88 @@ function MiniSparkline({ data, color = '#3B82F6' }: { data: number[]; color?: st
   );
 }
 
-// 리드 프로그레스 바 (칸칸이 채워지는 막대)
-function LeadProgressBar({ leads, maxLeads }: { leads: number; maxLeads: number }) {
-  const percentage = maxLeads > 0 ? (leads / maxLeads) * 100 : 0;
-  const totalBlocks = 20; // 총 블록 수
-  const filledBlocks = Math.round((percentage / 100) * totalBlocks);
+// 현대적 게이지바 컴포넌트
+function ModernGaugeBar({
+  label,
+  value,
+  maxValue,
+  gradient,
+  labelColor = 'text-gray-500',
+  valueColor = 'text-gray-900',
+  icon
+}: {
+  label: string;
+  value: number;
+  maxValue: number;
+  gradient: string;
+  labelColor?: string;
+  valueColor?: string;
+  icon?: React.ReactNode;
+}) {
+  const getPercent = (val: number, max: number) =>
+    max > 0 ? Math.min(Math.max((val / max) * 100, val > 0 ? 3 : 0), 100) : 0;
 
   return (
-    <div className="flex items-center gap-1.5 mt-1">
-      {/* 블록 막대 */}
-      <div className="flex-1 flex gap-[2px]">
-        {Array.from({ length: totalBlocks }).map((_, i) => (
-          <div
-            key={i}
-            className={`h-2 flex-1 rounded-[1px] transition-colors ${
-              i < filledBlocks
-                ? 'bg-emerald-500'
-                : 'bg-gray-100'
-            }`}
-          />
-        ))}
-      </div>
-      {/* 리드 숫자 표시 */}
-      <span className="text-xs text-gray-500 font-medium w-10 text-right">
-        {leads.toLocaleString()}건
+    <div className="flex items-center gap-2">
+      <span className={`w-10 text-[10px] ${labelColor} flex items-center gap-0.5`}>
+        {icon}
+        {label}
       </span>
+      <span className={`w-10 text-xs font-bold text-right ${valueColor}`}>{value}</span>
+      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full bg-gradient-to-r ${gradient} transition-all duration-300`}
+          style={{ width: `${getPercent(value, maxValue)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// 리드 프로그레스 바 (현대적 게이지바 + FB/IG)
+function LeadProgressBar({
+  leads,
+  maxLeads,
+  instagramLeads = 0,
+  facebookLeads = 0,
+  maxInstagramLeads = 0,
+  maxFacebookLeads = 0
+}: {
+  leads: number;
+  maxLeads: number;
+  instagramLeads?: number;
+  facebookLeads?: number;
+  maxInstagramLeads?: number;
+  maxFacebookLeads?: number;
+}) {
+  return (
+    <div className="space-y-1 mt-1.5">
+      {/* 전체 리드 게이지바 */}
+      <ModernGaugeBar
+        label="리드"
+        value={leads}
+        maxValue={maxLeads}
+        gradient="from-emerald-400 via-teal-500 to-cyan-500"
+      />
+      {/* 인스타그램 게이지바 */}
+      <ModernGaugeBar
+        label="IG"
+        value={instagramLeads}
+        maxValue={maxInstagramLeads}
+        gradient="from-purple-400 via-fuchsia-500 to-pink-500"
+        labelColor="text-purple-600"
+        valueColor="text-purple-600"
+        icon={<Instagram className="w-3 h-3" />}
+      />
+      {/* 페이스북 게이지바 */}
+      <ModernGaugeBar
+        label="FB"
+        value={facebookLeads}
+        maxValue={maxFacebookLeads}
+        gradient="from-blue-400 via-blue-500 to-indigo-500"
+        labelColor="text-blue-600"
+        valueColor="text-blue-600"
+      />
     </div>
   );
 }
@@ -90,9 +150,18 @@ export function TopAdsTable({
   data,
   avgCpl,
   showSparkline = false,  // 기본값 false로 변경 (모바일 대응)
-  sparklineData
+  sparklineData,
+  clientId
 }: TopAdsTableProps) {
   const [sortBy, setSortBy] = useState<'cpl' | 'leads' | 'spend'>('cpl');
+  const [platformLeads, setPlatformLeads] = useState<Map<string, AdPlatformLeads>>(new Map());
+
+  // 플랫폼별 리드 데이터 로드
+  useEffect(() => {
+    if (clientId) {
+      getAdPlatformLeads(clientId).then(setPlatformLeads);
+    }
+  }, [clientId]);
 
   // 정렬된 데이터
   const sortedData = [...data].sort((a, b) => {
@@ -118,6 +187,15 @@ export function TopAdsTable({
   // 최대 리드 수 계산 (프로그레스 바용)
   const maxLeads = data.length > 0
     ? Math.max(...data.map(ad => ad.leads))
+    : 0;
+
+  // 플랫폼별 최대 리드 수
+  const platformLeadsArray = Array.from(platformLeads.values());
+  const maxInstagramLeads = platformLeadsArray.length > 0
+    ? Math.max(...platformLeadsArray.map(p => p.instagram_leads))
+    : 0;
+  const maxFacebookLeads = platformLeadsArray.length > 0
+    ? Math.max(...platformLeadsArray.map(p => p.facebook_leads))
     : 0;
 
   return (
@@ -243,6 +321,9 @@ export function TopAdsTable({
             {sortedData.map((ad, index) => {
               const rank = index + 1;
               const adSparkline = sparklineData?.[ad.ad_id];
+              const adPlatform = platformLeads.get(ad.ad_name);
+              const instagramLeads = adPlatform?.instagram_leads || 0;
+              const facebookLeads = adPlatform?.facebook_leads || 0;
 
               // 트렌드 계산 (스파크라인 데이터 기반)
               let trend: 'up' | 'down' | 'stable' = 'stable';
@@ -271,8 +352,15 @@ export function TopAdsTable({
                       <div className="text-xs lg:text-xs text-gray-400 truncate" title={ad.campaign_name}>
                         {ad.campaign_name}
                       </div>
-                      {/* 리드 프로그레스 바 */}
-                      <LeadProgressBar leads={ad.leads} maxLeads={maxLeads} />
+                      {/* 리드 프로그레스 바 (리드 + IG + FB) */}
+                      <LeadProgressBar
+                        leads={ad.leads}
+                        maxLeads={maxLeads}
+                        instagramLeads={instagramLeads}
+                        facebookLeads={facebookLeads}
+                        maxInstagramLeads={maxInstagramLeads}
+                        maxFacebookLeads={maxFacebookLeads}
+                      />
                     </div>
                   </td>
 

@@ -7,6 +7,11 @@
       "specification": "docs/PROJECT_SPECIFICATION.md",
       "implementation": "docs/IMPLEMENTATION_GUIDE.md",
       "progress": "docs/PROGRESS_SUMMARY.md"
+    },
+    "deployment": {
+      "dashboard": "Vercel (GitHub 자동배포)",
+      "workers": "GitHub Actions",
+      "railway": "❌ 사용 안 함"
     }
   },
   "guidelines": {
@@ -63,7 +68,8 @@
     "✅ Upstash Redis keepAlive 30초 설정",
     "✅ BullMQ concurrency 2로 제한",
     "✅ KPI 카드는 증감률+절대값+이전값 표시",
-    "⚠️ 가이드와 불일치 시 즉시 중단하고 사용자에게 보고"
+    "⚠️ 가이드와 불일치 시 즉시 중단하고 사용자에게 보고",
+    "🚫 Railway 사용 금지! 이 프로젝트는 Railway 미사용. Dashboard: git push → Vercel 자동배포, 데이터수집/리포트: GitHub Actions. (_backup/docs의 Railway 문서는 과거 자료임)"
   ],
   "auto_skills": [
     "bas-meta-guide"

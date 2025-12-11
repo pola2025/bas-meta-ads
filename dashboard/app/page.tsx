@@ -402,6 +402,7 @@ export default function Home() {
               data={topAds}
               avgCpl={kpi.avg_cpl}
               showSparkline={false}
+              clientId={effectiveClientId || undefined}
             />
           </section>
 
