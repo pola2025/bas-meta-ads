@@ -785,7 +785,7 @@ export async function getAllAdsWithStatus(clientId?: string): Promise<AdWithStat
     // 모든 광고 데이터 조회 (날짜 포함)
     let query = supabase
       .from('ads_insights_daily')
-      .select('ad_name, campaign_name, platform, leads, spend, clicks, impressions, date, avg_watch_time')
+      .select('ad_name, campaign_name, platform, leads, spend, clicks, impressions, date, avg_watch_time, video_views')
       .order('date', { ascending: false })
       .range(0, 5000);
 
@@ -820,6 +820,7 @@ export async function getAllAdsWithStatus(clientId?: string): Promise<AdWithStat
           spend: 0,
           clicks: 0,
           impressions: 0,
+          video_views: 0,
           lastActiveDate: row.date,
           firstActiveDate: row.date,
           _watchTimeSum: 0,
@@ -830,6 +831,7 @@ export async function getAllAdsWithStatus(clientId?: string): Promise<AdWithStat
       acc[key].spend += row.spend || 0;
       acc[key].clicks += row.clicks || 0;
       acc[key].impressions += row.impressions || 0;
+      acc[key].video_views += row.video_views || 0;
       if (row.avg_watch_time) {
         acc[key]._watchTimeSum += row.avg_watch_time;
         acc[key]._watchTimeCount += 1;
@@ -850,6 +852,7 @@ export async function getAllAdsWithStatus(clientId?: string): Promise<AdWithStat
       spend: item.spend,
       clicks: item.clicks,
       impressions: item.impressions,
+      video_views: item.video_views,
       ctr: item.impressions > 0 ? (item.clicks / item.impressions) * 100 : 0,
       cpc: item.clicks > 0 ? item.spend / item.clicks : 0,
       cvr: item.clicks > 0 ? (item.leads / item.clicks) * 100 : 0,
@@ -868,6 +871,74 @@ export async function getAllAdsWithStatus(clientId?: string): Promise<AdWithStat
   } catch (error) {
     console.error('Unexpected error in getAllAdsWithStatus:', error);
     return [];
+  }
+}
+
+// 광고별 플랫폼별 리드 데이터 조회 (인스타그램/페이스북)
+export interface AdPlatformLeads {
+  ad_name: string;
+  instagram_leads: number;
+  facebook_leads: number;
+  total_leads: number;
+}
+
+export async function getAdPlatformLeads(
+  clientId?: string,
+  filters?: { startDate?: string; endDate?: string }
+): Promise<Map<string, AdPlatformLeads>> {
+  try {
+    let query = supabase
+      .from('raw_data')
+      .select('ad_name, platform, leads');
+
+    if (clientId) {
+      query = query.eq('client_id', clientId);
+    }
+    if (filters?.startDate) {
+      query = query.gte('date', filters.startDate);
+    }
+    if (filters?.endDate) {
+      query = query.lte('date', filters.endDate);
+    }
+
+    const { data, error } = await query.range(0, 10000);
+
+    if (error) {
+      console.error('Error fetching ad platform leads:', error);
+      return new Map();
+    }
+
+    // 광고별 플랫폼별 집계
+    const aggregated = (data || []).reduce((acc: Record<string, AdPlatformLeads>, row: any) => {
+      const adName = row.ad_name;
+      if (!adName) return acc;
+
+      if (!acc[adName]) {
+        acc[adName] = {
+          ad_name: adName,
+          instagram_leads: 0,
+          facebook_leads: 0,
+          total_leads: 0
+        };
+      }
+
+      const leads = row.leads || 0;
+      const platform = (row.platform || '').toLowerCase();
+
+      if (platform === 'instagram') {
+        acc[adName].instagram_leads += leads;
+      } else if (platform === 'facebook') {
+        acc[adName].facebook_leads += leads;
+      }
+      acc[adName].total_leads += leads;
+
+      return acc;
+    }, {});
+
+    return new Map(Object.entries(aggregated));
+  } catch (error) {
+    console.error('Unexpected error in getAdPlatformLeads:', error);
+    return new Map();
   }
 }
 

@@ -53,6 +53,7 @@ export interface TopAd {
   cvr: number;
   impressions: number;
   avg_watch_time?: number; // 평균 시청시간 (초)
+  video_views?: number; // 영상 조회수
 }
 
 // 필터

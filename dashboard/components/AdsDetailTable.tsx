@@ -1,25 +1,34 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { TopAd } from '@/types/analytics'
-import { AdWithStatus } from '@/lib/api'
-import { TrendingUp, TrendingDown, ChevronDown, ChevronUp, Circle } from 'lucide-react'
+import { AdWithStatus, AdPlatformLeads, getAdPlatformLeads } from '@/lib/api'
+import { TrendingUp, TrendingDown, ChevronDown, ChevronUp, Circle, Instagram } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ko } from 'date-fns/locale'
 
 interface AdsDetailTableProps {
   data: AdWithStatus[]
   onAdClick?: (ad: TopAd) => void
+  clientId?: string
 }
 
 type SortKey = 'ad_name' | 'spend' | 'impressions' | 'clicks' | 'cpc' | 'leads' | 'cpl' | 'ctr' | 'cvr' | 'isActive' | 'lastActiveDate' | 'avg_watch_time'
 type SortDirection = 'asc' | 'desc'
 
-export function AdsDetailTable({ data, onAdClick }: AdsDetailTableProps) {
+export function AdsDetailTable({ data, onAdClick, clientId }: AdsDetailTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>('isActive')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [expandedAdId, setExpandedAdId] = useState<string | null>(null)
   const [showInactive, setShowInactive] = useState(true)
+  const [platformLeads, setPlatformLeads] = useState<Map<string, AdPlatformLeads>>(new Map())
+
+  // 플랫폼별 리드 데이터 로드
+  useEffect(() => {
+    if (clientId) {
+      getAdPlatformLeads(clientId).then(setPlatformLeads)
+    }
+  }, [clientId])
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -102,10 +111,36 @@ export function AdsDetailTable({ data, onAdClick }: AdsDetailTableProps) {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
-  // 최대 리드 수 계산 (프로그레스 바용)
+  // 최대값 계산 (프로그레스 바용)
   const maxLeads = data.length > 0
     ? Math.max(...data.map(ad => ad.leads))
     : 0
+
+  // 플랫폼별 최대 리드 수
+  const platformLeadsArray = Array.from(platformLeads.values())
+  const maxInstagramLeads = platformLeadsArray.length > 0
+    ? Math.max(...platformLeadsArray.map(p => p.instagram_leads))
+    : 0
+  const maxFacebookLeads = platformLeadsArray.length > 0
+    ? Math.max(...platformLeadsArray.map(p => p.facebook_leads))
+    : 0
+
+  // 다른 지표의 최대값
+  const maxSpend = data.length > 0 ? Math.max(...data.map(ad => ad.spend)) : 0
+  const maxCpl = data.length > 0 ? Math.max(...data.filter(ad => ad.cpl > 0).map(ad => ad.cpl), 50) : 50
+  const maxVideoViews = data.length > 0 ? Math.max(...data.map(ad => ad.video_views || 0)) : 0
+  const maxWatchTime = data.length > 0 ? Math.max(...data.map(ad => ad.avg_watch_time || 0)) : 0
+
+  // 게이지 퍼센트 계산 헬퍼
+  const getPercent = (value: number, max: number) => max > 0 ? Math.min(Math.max((value / max) * 100, value > 0 ? 3 : 0), 100) : 0
+
+  // CPL 색상 계산
+  const getCplColor = (cpl: number) => {
+    if (cpl === 0) return { text: 'text-gray-400', bar: 'from-gray-200 to-gray-300' }
+    if (cpl <= 20) return { text: 'text-emerald-600', bar: 'from-emerald-400 to-teal-500' }
+    if (cpl <= 35) return { text: 'text-amber-600', bar: 'from-yellow-400 to-amber-500' }
+    return { text: 'text-red-600', bar: 'from-orange-400 to-red-500' }
+  }
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -232,62 +267,181 @@ export function AdsDetailTable({ data, onAdClick }: AdsDetailTableProps) {
               {/* 확장 시 상세 정보 */}
               <div
                 className={`overflow-hidden transition-all duration-200 ease-in-out ${
-                  expandedAdId === ad.ad_id ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'
+                  expandedAdId === ad.ad_id ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
                 }`}
               >
-                <div className="px-3 pb-3 pt-1">
-                  {/* 캠페인명 */}
-                  <p className="text-[10px] text-gray-400 truncate mb-2">{ad.campaign_name}</p>
-                  {/* 리드 프로그레스 바 */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${ad.isActive ? 'bg-emerald-500' : 'bg-emerald-300'}`}
-                        style={{ width: `${maxLeads > 0 ? (ad.leads / maxLeads) * 100 : 0}%` }}
-                      />
-                    </div>
-                    <span className="text-[10px] text-gray-500">
-                      {Math.round((ad.leads / maxLeads) * 100)}%
-                    </span>
-                  </div>
-                  {/* 상세 지표 그리드 */}
-                  <div className="grid grid-cols-5 gap-2 text-center">
-                    <div className="bg-gray-50 rounded py-1.5">
-                      <p className="text-[9px] text-gray-500">지출</p>
-                      <p className={`text-[11px] font-bold ${ad.isActive ? 'text-gray-900' : 'text-gray-500'}`}>
-                        ${ad.spend >= 1000 ? (ad.spend/1000).toFixed(1) + 'K' : ad.spend.toFixed(0)}
+                {(() => {
+                  const adPlatform = platformLeads.get(ad.ad_name)
+                  const instagramLeads = adPlatform?.instagram_leads || 0
+                  const facebookLeads = adPlatform?.facebook_leads || 0
+                  const cplColor = getCplColor(ad.cpl)
+
+                  // 활성 광고: 현대적 게이지바 스타일
+                  if (ad.isActive) {
+                    return (
+                      <div className="px-3 pb-3 pt-1 space-y-2">
+                        {/* 캠페인명 */}
+                        <p className="text-[10px] text-gray-400 truncate">{ad.campaign_name}</p>
+
+                        {/* 리드 게이지바 */}
+                        <div className="flex items-center gap-2">
+                          <span className="w-14 text-xs text-gray-500">리드</span>
+                          <span className="w-12 text-xs font-bold text-gray-900 text-right">{ad.leads}</span>
+                          <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-teal-500 to-cyan-500 transition-all duration-300"
+                              style={{ width: `${getPercent(ad.leads, maxLeads)}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* 인스타그램 게이지바 (보라색) */}
+                        <div className="flex items-center gap-2">
+                          <span className="w-14 text-xs text-purple-600 flex items-center gap-1">
+                            <Instagram className="w-3 h-3" />
+                            IG
+                          </span>
+                          <span className="w-12 text-xs font-bold text-purple-600 text-right">{instagramLeads}</span>
+                          <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-purple-400 via-fuchsia-500 to-pink-500 transition-all duration-300"
+                              style={{ width: `${getPercent(instagramLeads, maxInstagramLeads)}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* 페이스북 게이지바 (블루) */}
+                        <div className="flex items-center gap-2">
+                          <span className="w-14 text-xs text-blue-600">FB</span>
+                          <span className="w-12 text-xs font-bold text-blue-600 text-right">{facebookLeads}</span>
+                          <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-blue-400 via-blue-500 to-indigo-500 transition-all duration-300"
+                              style={{ width: `${getPercent(facebookLeads, maxFacebookLeads)}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* 하단 지표: 지출, CPL, 영상조회, 평균시청 - 게이지바 형식 */}
+                        <div className="space-y-1.5 mt-1 pt-2 border-t border-gray-100">
+                          {/* 지출 게이지바 */}
+                          <div className="flex items-center gap-2">
+                            <span className="w-14 text-xs text-gray-500">지출</span>
+                            <span className="w-14 text-xs font-bold text-gray-900 text-right">
+                              ${ad.spend >= 1000 ? (ad.spend/1000).toFixed(1) + 'K' : ad.spend.toFixed(0)}
+                            </span>
+                            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-gray-400 to-gray-500 transition-all duration-300"
+                                style={{ width: `${getPercent(ad.spend, maxSpend)}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* CPL 게이지바 */}
+                          <div className="flex items-center gap-2">
+                            <span className="w-14 text-xs text-gray-500">CPL</span>
+                            <span className={`w-14 text-xs font-bold text-right ${cplColor.text}`}>
+                              ${ad.cpl > 0 ? ad.cpl.toFixed(0) : '-'}
+                            </span>
+                            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full bg-gradient-to-r ${cplColor.bar} transition-all duration-300`}
+                                style={{ width: `${getPercent(ad.cpl, maxCpl)}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* 영상조회 게이지바 */}
+                          <div className="flex items-center gap-2">
+                            <span className="w-14 text-xs text-gray-500">영상조회</span>
+                            <span className="w-14 text-xs font-bold text-gray-900 text-right">
+                              {(ad.video_views || 0) >= 1000 ? ((ad.video_views || 0)/1000).toFixed(1) + 'K' : (ad.video_views || 0)}
+                            </span>
+                            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-sky-400 to-blue-500 transition-all duration-300"
+                                style={{ width: `${getPercent(ad.video_views || 0, maxVideoViews)}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* 평균시청 게이지바 */}
+                          <div className="flex items-center gap-2">
+                            <span className="w-14 text-xs text-gray-500">평균시청</span>
+                            <span className="w-14 text-xs font-bold text-purple-600 text-right">
+                              {formatWatchTime(ad.avg_watch_time)}
+                            </span>
+                            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-violet-400 to-purple-500 transition-all duration-300"
+                                style={{ width: `${getPercent(ad.avg_watch_time || 0, maxWatchTime)}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 최근 활동일 */}
+                        <p className="text-[10px] text-gray-400 text-right">
+                          최근 활동: {formatDate(ad.lastActiveDate)}
+                        </p>
+                      </div>
+                    )
+                  }
+
+                  // 비활성 광고: 기존 스타일 유지
+                  return (
+                    <div className="px-3 pb-3 pt-1">
+                      <p className="text-[10px] text-gray-400 truncate mb-2">{ad.campaign_name}</p>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-emerald-300"
+                            style={{ width: `${maxLeads > 0 ? (ad.leads / maxLeads) * 100 : 0}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] text-gray-500">
+                          {maxLeads > 0 ? Math.round((ad.leads / maxLeads) * 100) : 0}%
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-5 gap-2 text-center">
+                        <div className="bg-gray-50 rounded py-1.5">
+                          <p className="text-[9px] text-gray-500">지출</p>
+                          <p className="text-[11px] font-bold text-gray-500">
+                            ${ad.spend >= 1000 ? (ad.spend/1000).toFixed(1) + 'K' : ad.spend.toFixed(0)}
+                          </p>
+                        </div>
+                        <div className="bg-gray-50 rounded py-1.5">
+                          <p className="text-[9px] text-gray-500">클릭</p>
+                          <p className="text-[11px] font-bold text-gray-500">
+                            {ad.clicks >= 1000 ? (ad.clicks/1000).toFixed(1) + 'K' : ad.clicks}
+                          </p>
+                        </div>
+                        <div className="bg-gray-50 rounded py-1.5">
+                          <p className="text-[9px] text-gray-500">CTR</p>
+                          <p className="text-[11px] font-bold text-blue-400">
+                            {ad.ctr.toFixed(1)}%
+                          </p>
+                        </div>
+                        <div className="bg-gray-50 rounded py-1.5">
+                          <p className="text-[9px] text-gray-500">CVR</p>
+                          <p className="text-[11px] font-bold text-teal-400">
+                            {ad.cvr.toFixed(1)}%
+                          </p>
+                        </div>
+                        <div className="bg-gray-50 rounded py-1.5">
+                          <p className="text-[9px] text-gray-500">시청</p>
+                          <p className="text-[11px] font-bold text-purple-400">
+                            {formatWatchTime(ad.avg_watch_time)}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-2 text-right">
+                        최근 활동: {formatDate(ad.lastActiveDate)}
                       </p>
                     </div>
-                    <div className="bg-gray-50 rounded py-1.5">
-                      <p className="text-[9px] text-gray-500">클릭</p>
-                      <p className={`text-[11px] font-bold ${ad.isActive ? 'text-gray-900' : 'text-gray-500'}`}>
-                        {ad.clicks >= 1000 ? (ad.clicks/1000).toFixed(1) + 'K' : ad.clicks}
-                      </p>
-                    </div>
-                    <div className="bg-gray-50 rounded py-1.5">
-                      <p className="text-[9px] text-gray-500">CTR</p>
-                      <p className={`text-[11px] font-bold ${ad.isActive ? 'text-blue-600' : 'text-blue-400'}`}>
-                        {ad.ctr.toFixed(1)}%
-                      </p>
-                    </div>
-                    <div className="bg-gray-50 rounded py-1.5">
-                      <p className="text-[9px] text-gray-500">CVR</p>
-                      <p className={`text-[11px] font-bold ${ad.isActive ? 'text-teal-600' : 'text-teal-400'}`}>
-                        {ad.cvr.toFixed(1)}%
-                      </p>
-                    </div>
-                    <div className="bg-gray-50 rounded py-1.5">
-                      <p className="text-[9px] text-gray-500">시청</p>
-                      <p className={`text-[11px] font-bold ${ad.isActive ? 'text-purple-600' : 'text-purple-400'}`}>
-                        {formatWatchTime(ad.avg_watch_time)}
-                      </p>
-                    </div>
-                  </div>
-                  {/* 최근 활동일 */}
-                  <p className="text-[10px] text-gray-400 mt-2 text-right">
-                    최근 활동: {formatDate(ad.lastActiveDate)}
-                  </p>
-                </div>
+                  )
+                })()}
               </div>
             </div>
           ))}
@@ -395,41 +549,81 @@ export function AdsDetailTable({ data, onAdClick }: AdsDetailTableProps) {
                 </td>
                 {/* 광고명 */}
                 <td className="px-4 py-3">
-                  <div className="flex items-center">
-                    <span className="text-xs font-medium text-gray-400 mr-3">
-                      {index + 1}
-                    </span>
-                    <div className="flex-1 min-w-[180px]">
-                      <div className={`text-sm font-medium ${ad.isActive ? 'text-gray-900' : 'text-gray-500'}`}>
-                        {ad.ad_name}
-                      </div>
-                      <div className="text-xs text-gray-400 mt-0.5">
-                        {ad.campaign_name}
-                      </div>
-                      {/* 리드 프로그레스 바 */}
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <div className="flex-1 flex gap-[2px]">
-                          {Array.from({ length: 20 }).map((_, i) => {
-                            const percentage = maxLeads > 0 ? (ad.leads / maxLeads) * 100 : 0
-                            const filledBlocks = Math.round((percentage / 100) * 20)
-                            return (
-                              <div
-                                key={i}
-                                className={`h-2 flex-1 rounded-[1px] transition-colors ${
-                                  i < filledBlocks
-                                    ? ad.isActive ? 'bg-emerald-500' : 'bg-emerald-200'
-                                    : 'bg-gray-100'
-                                }`}
-                              />
-                            )
-                          })}
-                        </div>
-                        <span className={`text-xs font-medium w-10 text-right whitespace-nowrap ${ad.isActive ? 'text-gray-500' : 'text-gray-400'}`}>
-                          {ad.leads.toLocaleString()}건
+                  {(() => {
+                    const adPlatform = platformLeads.get(ad.ad_name)
+                    const instagramLeads = adPlatform?.instagram_leads || 0
+                    const facebookLeads = adPlatform?.facebook_leads || 0
+
+                    return (
+                      <div className="flex items-start">
+                        <span className="text-xs font-medium text-gray-400 mr-3 mt-1">
+                          {index + 1}
                         </span>
+                        <div className="flex-1 min-w-[280px]">
+                          <div className={`text-sm font-medium ${ad.isActive ? 'text-gray-900' : 'text-gray-500'}`}>
+                            {ad.ad_name}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-0.5 mb-2">
+                            {ad.campaign_name}
+                          </div>
+
+                          {/* 현대적 게이지바 3개 - 리드/인스타그램/페이스북 */}
+                          <div className="space-y-1.5">
+                            {/* 리드 게이지바 */}
+                            <div className="flex items-center gap-2">
+                              <span className="w-10 text-[10px] text-gray-500">리드</span>
+                              <span className={`w-12 text-xs font-bold text-right ${ad.isActive ? 'text-gray-900' : 'text-gray-500'}`}>{ad.leads}</span>
+                              <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-300 ${
+                                    ad.isActive
+                                      ? 'bg-gradient-to-r from-emerald-400 via-teal-500 to-cyan-500'
+                                      : 'bg-gradient-to-r from-emerald-200 to-teal-300'
+                                  }`}
+                                  style={{ width: `${getPercent(ad.leads, maxLeads)}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* 인스타그램 게이지바 (보라색 계열) */}
+                            <div className="flex items-center gap-2">
+                              <span className="w-10 text-[10px] text-purple-600 flex items-center gap-0.5">
+                                <Instagram className="w-3 h-3" />
+                                IG
+                              </span>
+                              <span className={`w-12 text-xs font-bold text-right ${ad.isActive ? 'text-purple-600' : 'text-purple-400'}`}>{instagramLeads}</span>
+                              <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-300 ${
+                                    ad.isActive
+                                      ? 'bg-gradient-to-r from-purple-400 via-fuchsia-500 to-pink-500'
+                                      : 'bg-gradient-to-r from-purple-200 to-fuchsia-300'
+                                  }`}
+                                  style={{ width: `${getPercent(instagramLeads, maxInstagramLeads)}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* 페이스북 게이지바 (블루 계열) */}
+                            <div className="flex items-center gap-2">
+                              <span className={`w-10 text-[10px] ${ad.isActive ? 'text-blue-600' : 'text-blue-400'}`}>FB</span>
+                              <span className={`w-12 text-xs font-bold text-right ${ad.isActive ? 'text-blue-600' : 'text-blue-400'}`}>{facebookLeads}</span>
+                              <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-300 ${
+                                    ad.isActive
+                                      ? 'bg-gradient-to-r from-blue-400 via-blue-500 to-indigo-500'
+                                      : 'bg-gradient-to-r from-blue-200 to-indigo-300'
+                                  }`}
+                                  style={{ width: `${getPercent(facebookLeads, maxFacebookLeads)}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
+                    )
+                  })()}
                 </td>
                 {/* 최근 활동일 */}
                 <td className="px-4 py-3 text-center">

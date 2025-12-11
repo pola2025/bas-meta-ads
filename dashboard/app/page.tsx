@@ -680,6 +680,7 @@ export default function Home() {
                       <AdsDetailTable
                         data={allAds}
                         onAdClick={handleAdClick}
+                        clientId={effectiveClientId || undefined}
                       />
 
                       {selectedAd && !showProfileCard && (
