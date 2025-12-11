@@ -126,11 +126,11 @@ export default function Home() {
     clientId: effectiveClientId || undefined
   };
 
-  // 기본 날짜 범위
+  // 기본 날짜 범위 (전체 기간 = 2025-01-01 ~ 오늘)
   const today = startOfDay(new Date());
-  const defaultStart = subDays(today, 6);
+  const yearStart = new Date('2025-01-01'); // 2025년 데이터 전체
   const primaryRange = {
-    from: filters.startDate ? new Date(filters.startDate) : defaultStart,
+    from: filters.startDate ? new Date(filters.startDate) : yearStart,
     to: filters.endDate ? new Date(filters.endDate) : today
   };
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { subDays, subYears, startOfDay } from 'date-fns'
+import { subDays, startOfDay } from 'date-fns'
 import { useState, useEffect } from 'react'
 import DateRangePicker from './DateRangePicker'
 import SimpleDateInput from './SimpleDateInput'
@@ -49,10 +49,10 @@ export function FilterBar() {
   const startDate = searchParams.get('start')
   const endDate = searchParams.get('end')
 
-  // 날짜 범위를 Date 객체로 변환 (URL에 값이 없으면 전체 기간 = 최근 1년)
-  const oneYearAgo = subYears(today, 1)
+  // 날짜 범위를 Date 객체로 변환 (URL에 값이 없으면 전체 기간 = 2025년 전체)
+  const yearStart = new Date('2025-01-01')
   const dateRange = {
-    from: startDate ? new Date(startDate) : oneYearAgo,
+    from: startDate ? new Date(startDate) : yearStart,
     to: endDate ? new Date(endDate) : today,
   }
 
@@ -236,13 +236,12 @@ export function FilterBar() {
           <div className="flex flex-wrap gap-1 sm:gap-2 mb-2">
             <button
               onClick={() => {
-                const params = new URLSearchParams(searchParams)
-                params.delete('start')
-                params.delete('end')
-                router.push(`${pathname}?${params.toString()}`, { scroll: false })
+                // 전체 기간 = 2025-01-01 ~ 오늘
+                const end = new Date()
+                handleSimpleDateChange('2025-01-01', end.toISOString().split('T')[0])
               }}
               className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-md transition-colors ${
-                !startDate && !endDate
+                startDate === '2025-01-01'
                   ? 'bg-blue-500 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
