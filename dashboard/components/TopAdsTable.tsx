@@ -211,11 +211,12 @@ export function TopAdsTable({
           <h3 className="text-base font-semibold text-gray-900">TOP 광고 성과</h3>
           <p className="text-xs text-gray-500">
             CPL 기준 효율 순위
-            {startDate && endDate && (
-              <span className="ml-1 text-blue-600 font-medium">
-                ({startDate.slice(5)} ~ {endDate.slice(5)})
-              </span>
-            )}
+            <span className="ml-1 text-blue-600 font-medium">
+              {startDate && endDate
+                ? `(${startDate.slice(5)} ~ ${endDate.slice(5)})`
+                : '(전체 기간)'
+              }
+            </span>
           </p>
         </div>
 
