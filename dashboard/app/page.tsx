@@ -39,7 +39,7 @@ import {
   AdWithStatus
 } from '@/lib/api';
 import { DailyTrend, PlatformPerformance, KPISummary, TopAd } from '@/types/analytics';
-import { startOfDay, subDays, format, differenceInDays } from 'date-fns';
+import { startOfDay, subDays, subYears, format, differenceInDays } from 'date-fns';
 
 export default function Home() {
   const searchParams = useSearchParams();

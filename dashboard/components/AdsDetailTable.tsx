@@ -16,45 +16,38 @@ interface AdsDetailTableProps {
 }
 
 // 광고별 상세용 날짜 필터 컴포넌트
+type AdsDateFilterValue = 'all' | '7d' | '30d' | '60d' | '90d'
+
 function AdsDateFilter({
   value,
   onChange
 }: {
-  value: 'all' | '7d' | '30d' | 'custom'
-  onChange: (value: 'all' | '7d' | '30d' | 'custom') => void
+  value: AdsDateFilterValue
+  onChange: (value: AdsDateFilterValue) => void
 }) {
+  const options: { value: AdsDateFilterValue; label: string }[] = [
+    { value: 'all', label: '전체' },
+    { value: '7d', label: '7일' },
+    { value: '30d', label: '30일' },
+    { value: '60d', label: '60일' },
+    { value: '90d', label: '90일' },
+  ]
+
   return (
-    <div className="flex gap-1">
-      <button
-        onClick={() => onChange('all')}
-        className={`px-2 py-1 text-xs rounded-md transition-colors ${
-          value === 'all'
-            ? 'bg-blue-500 text-white'
-            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-        }`}
-      >
-        전체
-      </button>
-      <button
-        onClick={() => onChange('7d')}
-        className={`px-2 py-1 text-xs rounded-md transition-colors ${
-          value === '7d'
-            ? 'bg-blue-500 text-white'
-            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-        }`}
-      >
-        7일
-      </button>
-      <button
-        onClick={() => onChange('30d')}
-        className={`px-2 py-1 text-xs rounded-md transition-colors ${
-          value === '30d'
-            ? 'bg-blue-500 text-white'
-            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-        }`}
-      >
-        30일
-      </button>
+    <div className="flex gap-1 flex-wrap">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          onClick={() => onChange(opt.value)}
+          className={`px-2 py-1 text-xs rounded-md transition-colors ${
+            value === opt.value
+              ? 'bg-blue-500 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
     </div>
   )
 }
@@ -70,23 +63,28 @@ export function AdsDetailTable({ data, onAdClick, clientId, startDate, endDate }
   const [platformLeads, setPlatformLeads] = useState<Map<string, AdPlatformLeads>>(new Map())
 
   // 광고별 상세 전용 날짜 필터 (기본: 전체)
-  const [adsDateFilter, setAdsDateFilter] = useState<'all' | '7d' | '30d' | 'custom'>('all')
+  const [adsDateFilter, setAdsDateFilter] = useState<AdsDateFilterValue>('all')
+
+  // 날짜 필터에 따른 일수 계산
+  const getFilterDays = (filter: AdsDateFilterValue): number | null => {
+    switch (filter) {
+      case '7d': return 6
+      case '30d': return 29
+      case '60d': return 59
+      case '90d': return 89
+      default: return null // 전체
+    }
+  }
 
   // 플랫폼별 리드 데이터 로드 (날짜 필터에 따라)
   useEffect(() => {
     if (clientId) {
+      const days = getFilterDays(adsDateFilter)
       let filters: { startDate: string; endDate: string } | undefined
 
-      if (adsDateFilter === '7d') {
+      if (days !== null) {
         const end = new Date()
-        const start = subDays(end, 6)
-        filters = {
-          startDate: format(start, 'yyyy-MM-dd'),
-          endDate: format(end, 'yyyy-MM-dd')
-        }
-      } else if (adsDateFilter === '30d') {
-        const end = new Date()
-        const start = subDays(end, 29)
+        const start = subDays(end, days)
         filters = {
           startDate: format(start, 'yyyy-MM-dd'),
           endDate: format(end, 'yyyy-MM-dd')

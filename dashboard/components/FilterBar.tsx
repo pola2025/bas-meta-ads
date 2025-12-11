@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { subDays, startOfDay } from 'date-fns'
+import { subDays, subYears, startOfDay } from 'date-fns'
 import { useState, useEffect } from 'react'
 import DateRangePicker from './DateRangePicker'
 import SimpleDateInput from './SimpleDateInput'
@@ -49,9 +49,10 @@ export function FilterBar() {
   const startDate = searchParams.get('start')
   const endDate = searchParams.get('end')
 
-  // 날짜 범위를 Date 객체로 변환 (URL에 값이 없으면 기본값 사용)
+  // 날짜 범위를 Date 객체로 변환 (URL에 값이 없으면 전체 기간 = 최근 1년)
+  const oneYearAgo = subYears(today, 1)
   const dateRange = {
-    from: startDate ? new Date(startDate) : defaultStart,
+    from: startDate ? new Date(startDate) : oneYearAgo,
     to: endDate ? new Date(endDate) : today,
   }
 
