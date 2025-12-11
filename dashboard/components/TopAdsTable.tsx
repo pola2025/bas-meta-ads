@@ -209,7 +209,14 @@ export function TopAdsTable({
       <div className="px-4 py-3 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
           <h3 className="text-base font-semibold text-gray-900">TOP 광고 성과</h3>
-          <p className="text-xs text-gray-500">CPL 기준 효율 순위 (전체 기간)</p>
+          <p className="text-xs text-gray-500">
+            CPL 기준 효율 순위
+            {startDate && endDate && (
+              <span className="ml-1 text-blue-600 font-medium">
+                ({startDate.slice(5)} ~ {endDate.slice(5)})
+              </span>
+            )}
+          </p>
         </div>
 
         {/* 정렬 옵션 */}

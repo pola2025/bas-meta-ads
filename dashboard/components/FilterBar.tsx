@@ -43,33 +43,7 @@ export function FilterBar() {
     }
   }, [searchParams])
 
-  // 🔍 CRITICAL FIX: URL에 날짜가 없으면 기본 날짜 자동 설정
-  useEffect(() => {
-    const hasStartDate = searchParams.has('start')
-    const hasEndDate = searchParams.has('end')
-
-    // URL에 날짜가 하나라도 없으면 기본 날짜 설정
-    if (!hasStartDate || !hasEndDate) {
-      console.log('⚠️ FilterBar: Missing date parameters in URL, initializing defaults...')
-      console.log('  - has start:', hasStartDate, '| has end:', hasEndDate)
-
-      const params = new URLSearchParams(searchParams)
-
-      if (!hasStartDate) {
-        const defaultStartStr = defaultStart.toISOString().split('T')[0]
-        params.set('start', defaultStartStr)
-        console.log('  - Setting default start:', defaultStartStr)
-      }
-
-      if (!hasEndDate) {
-        const todayStr = today.toISOString().split('T')[0]
-        params.set('end', todayStr)
-        console.log('  - Setting default end:', todayStr)
-      }
-
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-    }
-  }, [searchParams, pathname, router, defaultStart, today])
+  // 날짜가 없으면 "전체 기간"으로 간주 - 자동 설정하지 않음
 
   // URL에서 필터 값 읽기
   const startDate = searchParams.get('start')
@@ -257,6 +231,50 @@ export function FilterBar() {
           <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
             날짜 범위
           </label>
+          {/* 빠른 선택 버튼 */}
+          <div className="flex flex-wrap gap-1 sm:gap-2 mb-2">
+            <button
+              onClick={() => {
+                const params = new URLSearchParams(searchParams)
+                params.delete('start')
+                params.delete('end')
+                router.push(`${pathname}?${params.toString()}`, { scroll: false })
+              }}
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-md transition-colors ${
+                !startDate && !endDate
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              전체 기간
+            </button>
+            <button
+              onClick={() => {
+                const end = new Date()
+                const start = subDays(end, 6)
+                handleSimpleDateChange(
+                  start.toISOString().split('T')[0],
+                  end.toISOString().split('T')[0]
+                )
+              }}
+              className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+            >
+              최근 7일
+            </button>
+            <button
+              onClick={() => {
+                const end = new Date()
+                const start = subDays(end, 29)
+                handleSimpleDateChange(
+                  start.toISOString().split('T')[0],
+                  end.toISOString().split('T')[0]
+                )
+              }}
+              className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+            >
+              최근 30일
+            </button>
+          </div>
           {dateInputMode === 'picker' ? (
             <DateRangePicker
               value={dateRange}

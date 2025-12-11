@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { TopAd } from '@/types/analytics'
 import { AdWithStatus, AdPlatformLeads, getAdPlatformLeads } from '@/lib/api'
 import { TrendingUp, TrendingDown, ChevronDown, ChevronUp, Circle, Instagram } from 'lucide-react'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, subDays } from 'date-fns'
 import { ko } from 'date-fns/locale'
 
 interface AdsDetailTableProps {
@@ -13,6 +13,50 @@ interface AdsDetailTableProps {
   clientId?: string
   startDate?: string
   endDate?: string
+}
+
+// 광고별 상세용 날짜 필터 컴포넌트
+function AdsDateFilter({
+  value,
+  onChange
+}: {
+  value: 'all' | '7d' | '30d' | 'custom'
+  onChange: (value: 'all' | '7d' | '30d' | 'custom') => void
+}) {
+  return (
+    <div className="flex gap-1">
+      <button
+        onClick={() => onChange('all')}
+        className={`px-2 py-1 text-xs rounded-md transition-colors ${
+          value === 'all'
+            ? 'bg-blue-500 text-white'
+            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+        }`}
+      >
+        전체
+      </button>
+      <button
+        onClick={() => onChange('7d')}
+        className={`px-2 py-1 text-xs rounded-md transition-colors ${
+          value === '7d'
+            ? 'bg-blue-500 text-white'
+            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+        }`}
+      >
+        7일
+      </button>
+      <button
+        onClick={() => onChange('30d')}
+        className={`px-2 py-1 text-xs rounded-md transition-colors ${
+          value === '30d'
+            ? 'bg-blue-500 text-white'
+            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+        }`}
+      >
+        30일
+      </button>
+    </div>
+  )
 }
 
 type SortKey = 'ad_name' | 'spend' | 'impressions' | 'clicks' | 'cpc' | 'leads' | 'cpl' | 'ctr' | 'cvr' | 'isActive' | 'lastActiveDate' | 'avg_watch_time'
@@ -25,13 +69,34 @@ export function AdsDetailTable({ data, onAdClick, clientId, startDate, endDate }
   const [showInactive, setShowInactive] = useState(true)
   const [platformLeads, setPlatformLeads] = useState<Map<string, AdPlatformLeads>>(new Map())
 
-  // 플랫폼별 리드 데이터 로드 (날짜 필터 적용)
+  // 광고별 상세 전용 날짜 필터 (기본: 전체)
+  const [adsDateFilter, setAdsDateFilter] = useState<'all' | '7d' | '30d' | 'custom'>('all')
+
+  // 플랫폼별 리드 데이터 로드 (날짜 필터에 따라)
   useEffect(() => {
     if (clientId) {
-      const filters = startDate && endDate ? { startDate, endDate } : undefined
+      let filters: { startDate: string; endDate: string } | undefined
+
+      if (adsDateFilter === '7d') {
+        const end = new Date()
+        const start = subDays(end, 6)
+        filters = {
+          startDate: format(start, 'yyyy-MM-dd'),
+          endDate: format(end, 'yyyy-MM-dd')
+        }
+      } else if (adsDateFilter === '30d') {
+        const end = new Date()
+        const start = subDays(end, 29)
+        filters = {
+          startDate: format(start, 'yyyy-MM-dd'),
+          endDate: format(end, 'yyyy-MM-dd')
+        }
+      }
+      // 'all'이면 filters는 undefined로 전체 기간 조회
+
       getAdPlatformLeads(clientId, filters).then(setPlatformLeads)
     }
-  }, [clientId, startDate, endDate])
+  }, [clientId, adsDateFilter])
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -150,19 +215,23 @@ export function AdsDetailTable({ data, onAdClick, clientId, startDate, endDate }
       {/* PC 헤더 */}
       <div className="hidden md:block px-6 py-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">광고별 상세 성과</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              총 {data.length}개 광고 •
-              <span className="text-green-600 ml-1">
-                <Circle className="w-2 h-2 inline fill-green-500 mr-1" />
-                활성 {activeCount}개
-              </span>
-              <span className="text-gray-400 ml-2">
-                <Circle className="w-2 h-2 inline fill-gray-300 mr-1" />
-                비활성 {inactiveCount}개
-              </span>
-            </p>
+          <div className="flex items-center gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">광고별 상세 성과</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                총 {data.length}개 광고 •
+                <span className="text-green-600 ml-1">
+                  <Circle className="w-2 h-2 inline fill-green-500 mr-1" />
+                  활성 {activeCount}개
+                </span>
+                <span className="text-gray-400 ml-2">
+                  <Circle className="w-2 h-2 inline fill-gray-300 mr-1" />
+                  비활성 {inactiveCount}개
+                </span>
+              </p>
+            </div>
+            {/* 날짜 필터 */}
+            <AdsDateFilter value={adsDateFilter} onChange={setAdsDateFilter} />
           </div>
           <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
             <input
@@ -178,36 +247,40 @@ export function AdsDetailTable({ data, onAdClick, clientId, startDate, endDate }
 
       {/* 모바일 헤더 */}
       <div className="block md:hidden px-3 py-3 border-b border-gray-200">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-gray-900 shrink-0">광고별 성과</h2>
-          <div className="flex items-center gap-2">
-            {/* 정렬 드롭다운 */}
-            <select
-              value={sortKey}
-              onChange={(e) => {
-                setSortKey(e.target.value as SortKey)
-                setSortDirection('desc')
-              }}
-              className="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-700"
-            >
-              <option value="isActive">활성순</option>
-              <option value="leads">리드순</option>
-              <option value="cpl">CPL순</option>
-              <option value="spend">지출순</option>
-              <option value="ctr">CTR순</option>
-            </select>
-            {/* 비활성 토글 */}
-            <button
-              onClick={() => setShowInactive(!showInactive)}
-              className={`text-xs px-2 py-1.5 rounded-md border ${
-                showInactive
-                  ? 'bg-gray-100 border-gray-300 text-gray-700'
-                  : 'bg-white border-gray-200 text-gray-400'
-              }`}
-            >
-              {showInactive ? `전체 ${data.length}` : `활성 ${activeCount}`}
-            </button>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-gray-900 shrink-0">광고별 성과</h2>
+            <div className="flex items-center gap-2">
+              {/* 정렬 드롭다운 */}
+              <select
+                value={sortKey}
+                onChange={(e) => {
+                  setSortKey(e.target.value as SortKey)
+                  setSortDirection('desc')
+                }}
+                className="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-700"
+              >
+                <option value="isActive">활성순</option>
+                <option value="leads">리드순</option>
+                <option value="cpl">CPL순</option>
+                <option value="spend">지출순</option>
+                <option value="ctr">CTR순</option>
+              </select>
+              {/* 비활성 토글 */}
+              <button
+                onClick={() => setShowInactive(!showInactive)}
+                className={`text-xs px-2 py-1.5 rounded-md border ${
+                  showInactive
+                    ? 'bg-gray-100 border-gray-300 text-gray-700'
+                    : 'bg-white border-gray-200 text-gray-400'
+                }`}
+              >
+                {showInactive ? `전체 ${data.length}` : `활성 ${activeCount}`}
+              </button>
+            </div>
           </div>
+          {/* 모바일 날짜 필터 */}
+          <AdsDateFilter value={adsDateFilter} onChange={setAdsDateFilter} />
         </div>
       </div>
 
