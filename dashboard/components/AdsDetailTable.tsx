@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { TopAd } from '@/types/analytics'
-import { AdWithStatus, AdPlatformLeads, getAdPlatformLeads } from '@/lib/api'
+import { AdWithStatus, AdPlatformLeads, getAdPlatformLeads, getAllAdsWithStatus } from '@/lib/api'
 import { TrendingUp, TrendingDown, ChevronDown, ChevronUp, Circle, Instagram } from 'lucide-react'
 import { format, parseISO, subDays } from 'date-fns'
 import { ko } from 'date-fns/locale'
@@ -93,7 +93,7 @@ function AdsDateFilter({
 type SortKey = 'ad_name' | 'spend' | 'impressions' | 'clicks' | 'cpc' | 'leads' | 'cpl' | 'ctr' | 'cvr' | 'isActive' | 'lastActiveDate' | 'avg_watch_time'
 type SortDirection = 'asc' | 'desc'
 
-export function AdsDetailTable({ data, onAdClick, clientId, startDate, endDate }: AdsDetailTableProps) {
+export function AdsDetailTable({ data: initialData, onAdClick, clientId, startDate, endDate }: AdsDetailTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>('isActive')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [expandedAdId, setExpandedAdId] = useState<string | null>(null)
@@ -102,6 +102,10 @@ export function AdsDetailTable({ data, onAdClick, clientId, startDate, endDate }
 
   // 광고별 상세 전용 날짜 필터 (기본: 전체)
   const [adsDateFilter, setAdsDateFilter] = useState<AdsDateFilterValue>('all')
+
+  // 필터링된 광고 데이터 (날짜 필터 적용)
+  const [filteredAdsData, setFilteredAdsData] = useState<AdWithStatus[]>(initialData)
+  const [isLoading, setIsLoading] = useState(false)
 
   // 커스텀 날짜 범위
   const today = format(new Date(), 'yyyy-MM-dd')
@@ -119,34 +123,51 @@ export function AdsDetailTable({ data, onAdClick, clientId, startDate, endDate }
     }
   }
 
-  // 플랫폼별 리드 데이터 로드 (날짜 필터에 따라)
-  useEffect(() => {
-    if (clientId) {
-      let filters: { startDate: string; endDate: string } | undefined
-
-      if (adsDateFilter === 'custom') {
-        // 커스텀 날짜 범위 사용
-        filters = {
-          startDate: customStartDate,
-          endDate: customEndDate
-        }
-      } else if (adsDateFilter !== 'all') {
-        // 프리셋 기간 사용
-        const days = getFilterDays(adsDateFilter)
-        if (days !== null) {
-          const end = new Date()
-          const start = subDays(end, days)
-          filters = {
-            startDate: format(start, 'yyyy-MM-dd'),
-            endDate: format(end, 'yyyy-MM-dd')
-          }
+  // 날짜 필터 계산 헬퍼
+  const getDateFilters = (): { startDate: string; endDate: string } | undefined => {
+    if (adsDateFilter === 'custom') {
+      return { startDate: customStartDate, endDate: customEndDate }
+    } else if (adsDateFilter !== 'all') {
+      const days = getFilterDays(adsDateFilter)
+      if (days !== null) {
+        const end = new Date()
+        const start = subDays(end, days)
+        return {
+          startDate: format(start, 'yyyy-MM-dd'),
+          endDate: format(end, 'yyyy-MM-dd')
         }
       }
-      // 'all'이면 filters는 undefined로 전체 기간 조회
+    }
+    return undefined // 전체
+  }
 
-      getAdPlatformLeads(clientId, filters).then(setPlatformLeads)
+  // 날짜 필터에 따라 광고 데이터 + 플랫폼별 리드 데이터 로드
+  useEffect(() => {
+    if (clientId) {
+      const filters = getDateFilters()
+
+      setIsLoading(true)
+
+      // 광고 데이터와 플랫폼별 리드 데이터를 동시에 조회
+      Promise.all([
+        getAllAdsWithStatus(clientId, filters),
+        getAdPlatformLeads(clientId, filters)
+      ]).then(([adsData, platformData]) => {
+        setFilteredAdsData(adsData)
+        setPlatformLeads(platformData)
+        setIsLoading(false)
+      }).catch(() => {
+        setIsLoading(false)
+      })
     }
   }, [clientId, adsDateFilter, customStartDate, customEndDate])
+
+  // 초기 데이터 동기화 (클라이언트 변경 시)
+  useEffect(() => {
+    if (adsDateFilter === 'all') {
+      setFilteredAdsData(initialData)
+    }
+  }, [initialData, adsDateFilter])
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -156,6 +177,9 @@ export function AdsDetailTable({ data, onAdClick, clientId, startDate, endDate }
       setSortDirection('desc')
     }
   }
+
+  // 실제 사용할 데이터 (필터링된 데이터)
+  const data = filteredAdsData
 
   // 필터링 및 정렬
   const filteredData = showInactive ? data : data.filter(ad => ad.isActive)
@@ -267,7 +291,10 @@ export function AdsDetailTable({ data, onAdClick, clientId, startDate, endDate }
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">광고별 상세 성과</h2>
+              <h2 className="text-lg font-semibold text-gray-900">
+                광고별 상세 성과
+                {isLoading && <span className="ml-2 text-sm text-gray-400 animate-pulse">로딩중...</span>}
+              </h2>
               <p className="text-sm text-gray-500 mt-1">
                 총 {data.length}개 광고 •
                 <span className="text-green-600 ml-1">
@@ -309,7 +336,10 @@ export function AdsDetailTable({ data, onAdClick, clientId, startDate, endDate }
       <div className="block md:hidden px-3 py-3 border-b border-gray-200">
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-gray-900 shrink-0">광고별 성과</h2>
+            <h2 className="text-sm font-semibold text-gray-900 shrink-0">
+              광고별 성과
+              {isLoading && <span className="ml-1 text-xs text-gray-400 animate-pulse">...</span>}
+            </h2>
             <div className="flex items-center gap-2">
               {/* 정렬 드롭다운 */}
               <select

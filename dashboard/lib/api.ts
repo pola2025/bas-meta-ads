@@ -780,7 +780,10 @@ export interface AdWithStatus extends TopAd {
   firstActiveDate: string;
 }
 
-export async function getAllAdsWithStatus(clientId?: string): Promise<AdWithStatus[]> {
+export async function getAllAdsWithStatus(
+  clientId?: string,
+  dateFilter?: { startDate: string; endDate: string }
+): Promise<AdWithStatus[]> {
   try {
     // 모든 광고 데이터 조회 (날짜 포함)
     let query = supabase
@@ -792,6 +795,14 @@ export async function getAllAdsWithStatus(clientId?: string): Promise<AdWithStat
     // ⚠️ 클라이언트별 데이터 분리 - 필수!
     if (clientId) {
       query = query.eq('client_id', clientId);
+    }
+
+    // 날짜 필터 적용
+    if (dateFilter?.startDate) {
+      query = query.gte('date', dateFilter.startDate);
+    }
+    if (dateFilter?.endDate) {
+      query = query.lte('date', dateFilter.endDate);
     }
 
     const { data, error } = await query;

@@ -192,7 +192,41 @@ function calculateWeeklySummary(data) {
   };
 }
 
-// 광고별 성과 집계
+// 플랫폼별(FB/IG) 성과 집계
+function getPlatformPerformance(weekData) {
+  if (!weekData || weekData.length === 0) {
+    return { facebook: { leads: 0, spend: 0 }, instagram: { leads: 0, spend: 0 }, other: { leads: 0, spend: 0 } };
+  }
+
+  const platformStats = {
+    facebook: { leads: 0, spend: 0, impressions: 0, clicks: 0 },
+    instagram: { leads: 0, spend: 0, impressions: 0, clicks: 0 },
+    other: { leads: 0, spend: 0, impressions: 0, clicks: 0 }
+  };
+
+  weekData.forEach(row => {
+    const platform = (row.platform || '').toLowerCase();
+    let key = 'other';
+    if (platform === 'facebook') key = 'facebook';
+    else if (platform === 'instagram') key = 'instagram';
+
+    platformStats[key].leads += row.leads || 0;
+    platformStats[key].spend += parseFloat(row.spend) || 0;
+    platformStats[key].impressions += row.impressions || 0;
+    platformStats[key].clicks += row.clicks || 0;
+  });
+
+  // CPL 계산
+  Object.keys(platformStats).forEach(key => {
+    const p = platformStats[key];
+    p.cpl = p.leads > 0 ? p.spend / p.leads : 0;
+    p.ctr = p.impressions > 0 ? (p.clicks / p.impressions) * 100 : 0;
+  });
+
+  return platformStats;
+}
+
+// 광고별 성과 집계 (플랫폼별 리드 포함)
 function getAdPerformance(weekData) {
   if (!weekData || weekData.length === 0) return [];
 
@@ -208,7 +242,12 @@ function getAdPerformance(weekData) {
         clicks: 0,
         leads: 0,
         spend: 0,
-        dailyPerformance: {}
+        dailyPerformance: {},
+        // 플랫폼별 리드 추가
+        fbLeads: 0,
+        igLeads: 0,
+        fbSpend: 0,
+        igSpend: 0
       };
     }
 
@@ -216,6 +255,16 @@ function getAdPerformance(weekData) {
     adStats[adKey].clicks += row.clicks || 0;
     adStats[adKey].leads += row.leads || 0;
     adStats[adKey].spend += parseFloat(row.spend) || 0;
+
+    // 플랫폼별 집계
+    const platform = (row.platform || '').toLowerCase();
+    if (platform === 'facebook') {
+      adStats[adKey].fbLeads += row.leads || 0;
+      adStats[adKey].fbSpend += parseFloat(row.spend) || 0;
+    } else if (platform === 'instagram') {
+      adStats[adKey].igLeads += row.leads || 0;
+      adStats[adKey].igSpend += parseFloat(row.spend) || 0;
+    }
 
     if (row.date) {
       if (!adStats[adKey].dailyPerformance[row.date]) {
@@ -229,7 +278,9 @@ function getAdPerformance(weekData) {
   return Object.values(adStats).map(ad => ({
     ...ad,
     cpl: ad.leads > 0 ? ad.spend / ad.leads : null,
-    ctr: ad.impressions > 0 ? (ad.clicks / ad.impressions) * 100 : 0
+    ctr: ad.impressions > 0 ? (ad.clicks / ad.impressions) * 100 : 0,
+    fbCpl: ad.fbLeads > 0 ? ad.fbSpend / ad.fbLeads : null,
+    igCpl: ad.igLeads > 0 ? ad.igSpend / ad.igLeads : null
   }));
 }
 
@@ -374,40 +425,22 @@ function getDayOfWeekKr(dateString) {
   return days[date.getDay()];
 }
 
-// 텔레그램 메시지 생성 (간단 요약 + 대시보드 링크)
-function generateTelegramMessages(dates, thisStats, lastStats, thisWeekData, adPerformance, campaignPerformance, aiInsights, clientInfo = { name: '비즈액터스쿨', slug: 'bas-k92m7x', id: '79e35fc6-a817-4ccc-9d5d-9a93c1ad4515' }) {
+// 텔레그램 메시지 생성 (간소화: 핵심 수치 + 대시보드 링크)
+function generateTelegramMessages(dates, thisStats, lastStats, thisWeekData, adPerformance, campaignPerformance, aiInsights, clientInfo = { name: '비즈액터스쿨', slug: 'bas-k92m7x', id: '79e35fc6-a817-4ccc-9d5d-9a93c1ad4515' }, platformStats = null) {
   const messages = [];
 
   // 대시보드 링크 생성
   const reportUrl = `${DASHBOARD_URL}/reports?client=${clientInfo.slug}`;
 
-  // 단일 메시지: 핵심 요약 + 대시보드 링크
+  // 간소화된 메시지
   let msg = `📊 *${escapeMd(clientInfo.name)} 주간 리포트*\n`;
-  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-  msg += `📅 ${escapeMd(dates.thisWeekStart)} \\~ ${escapeMd(dates.thisWeekEnd)}\n\n`;
+  msg += `${escapeMd(dates.thisWeekStart)} \\~ ${escapeMd(dates.thisWeekEnd)}\n\n`;
 
-  // 핵심 지표 요약
-  msg += `💰 지출: $${escapeMd(thisStats.spend.toFixed(0))}\n`;
-  msg += `🎯 리드: ${thisStats.leads}건\n`;
-  msg += `💵 CPL: $${escapeMd(thisStats.cpl.toFixed(2))}\n\n`;
+  // 핵심 수치 한 줄
+  msg += `💰 $${escapeMd(thisStats.spend.toFixed(0))} \\| 🎯 ${thisStats.leads}건 \\| CPL $${escapeMd(thisStats.cpl.toFixed(2))}\n\n`;
 
-  // 전주 대비 변화 (리드, CPL만)
-  const leadsChange = calculateChange(thisStats.leads, lastStats.leads);
-  const cplChange = calculateChange(thisStats.cpl, lastStats.cpl);
-  msg += `📈 전주 대비: 리드 ${escapeMd(leadsChange)}, CPL ${escapeMd(cplChange)}\n\n`;
-
-  // CPL 경고 (위험 수준일 때만)
-  if (thisStats.cpl >= CPL_DANGER_THRESHOLD) {
-    msg += `🚨 *CPL 위험* \\- 즉시 검토 필요\n\n`;
-  } else if (thisStats.cpl >= CPL_WARNING_THRESHOLD) {
-    msg += `⚠️ *CPL 주의* \\- 모니터링 권장\n\n`;
-  }
-
-  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg += `📊 *상세 리포트 보기*\n\n`;
-  msg += `${escapeMd(reportUrl)}\n\n`;
-  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg += `🤖 Powered by Polarad AI\n`;
+  // 대시보드 링크
+  msg += `📊 상세보기: ${escapeMd(reportUrl)}\n`;
 
   messages.push(msg);
 
@@ -490,6 +523,10 @@ async function generateAndSendReport(client, dates, forceResend = false) {
   const adPerformance = getAdPerformance(thisWeekData);
   const campaignPerformance = getCampaignPerformance(thisWeekData);
 
+  // 3.5. 플랫폼별(FB/IG) 성과
+  const platformStats = getPlatformPerformance(thisWeekData);
+  console.log(`   📱 플랫폼별: FB ${platformStats.facebook.leads}건, IG ${platformStats.instagram.leads}건`);
+
   // 4. 클라이언트 정보 설정
   const clientInfo = {
     name: clientName,
@@ -521,7 +558,8 @@ async function generateAndSendReport(client, dates, forceResend = false) {
     adPerformance,
     campaignPerformance,
     aiInsights,
-    clientInfo
+    clientInfo,
+    platformStats
   );
 
   // 7. 텔레그램 발송 (클라이언트별 chat_id 사용)
