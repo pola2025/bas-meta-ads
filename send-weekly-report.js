@@ -439,8 +439,8 @@ function generateTelegramMessages(dates, thisStats, lastStats, thisWeekData, adP
   // 핵심 수치 한 줄
   msg += `💰 $${escapeMd(thisStats.spend.toFixed(0))} \\| 🎯 ${thisStats.leads}건 \\| CPL $${escapeMd(thisStats.cpl.toFixed(2))}\n\n`;
 
-  // 대시보드 링크
-  msg += `📊 상세보기: ${escapeMd(reportUrl)}\n`;
+  // 대시보드 링크 (URL은 이스케이프하지 않고 인라인 링크로)
+  msg += `📊 [상세보기](${reportUrl})\n`;
 
   messages.push(msg);
 
