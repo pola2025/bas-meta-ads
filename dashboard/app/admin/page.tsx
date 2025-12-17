@@ -74,6 +74,14 @@ interface Client {
   plan_type: string;
   is_active: boolean;
   auth_status: string;
+  // OAuth 하이브리드 필드
+  auth_type: 'manual' | 'oauth';
+  status: 'pending' | 'active' | 'suspended' | 'expired';
+  meta_user_id: string | null;
+  meta_user_name: string | null;
+  oauth_registered_at: string | null;
+  approved_at: string | null;
+  approved_by: string | null;
   token_expires_at: string | null;
   service_start_date: string | null;
   service_end_date: string | null;
@@ -739,6 +747,84 @@ export default function AdminPage() {
       fetchRenewalData();  // 연장관리 목록도 새로고침
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error deleting client');
+    }
+  };
+
+  // OAuth 클라이언트 승인
+  const handleApprove = async (client: Client) => {
+    if (!confirm(`${client.client_name}을(를) 승인하시겠습니까?`)) return;
+
+    try {
+      const response = await fetch('/api/admin/clients/approve', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey || '',
+        },
+        body: JSON.stringify({ client_id: client.id }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to approve client');
+      }
+
+      fetchData();
+      alert(`${client.client_name}이(가) 승인되었습니다.`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error approving client');
+    }
+  };
+
+  // OAuth 클라이언트 중지
+  const handleSuspend = async (client: Client) => {
+    if (!confirm(`${client.client_name}을(를) 중지하시겠습니까?\n중지된 클라이언트는 데이터 수집이 중단됩니다.`)) return;
+
+    try {
+      const response = await fetch('/api/admin/clients/suspend', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey || '',
+        },
+        body: JSON.stringify({ client_id: client.id }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to suspend client');
+      }
+
+      fetchData();
+      alert(`${client.client_name}이(가) 중지되었습니다.`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error suspending client');
+    }
+  };
+
+  // OAuth 클라이언트 재활성화
+  const handleActivate = async (client: Client) => {
+    if (!confirm(`${client.client_name}을(를) 재활성화하시겠습니까?`)) return;
+
+    try {
+      const response = await fetch('/api/admin/clients/activate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey || '',
+        },
+        body: JSON.stringify({ client_id: client.id }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to activate client');
+      }
+
+      fetchData();
+      alert(`${client.client_name}이(가) 재활성화되었습니다.`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error activating client');
     }
   };
 
@@ -1881,6 +1967,29 @@ export default function AdminPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
                             <h3 className="text-lg font-semibold text-neutral-900">{client.client_name}</h3>
+                            {/* OAuth 타입 배지 */}
+                            <span
+                              className={`px-2 py-0.5 text-xs rounded-full ${
+                                client.auth_type === 'oauth' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              {client.auth_type === 'oauth' ? 'OAuth' : 'Manual'}
+                            </span>
+                            {/* OAuth 상태 배지 (OAuth 클라이언트만) */}
+                            {client.auth_type === 'oauth' && (
+                              <span
+                                className={`px-2 py-0.5 text-xs rounded-full ${
+                                  client.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                  client.status === 'active' ? 'bg-green-100 text-green-700' :
+                                  client.status === 'suspended' ? 'bg-orange-100 text-orange-700' :
+                                  'bg-red-100 text-red-700'
+                                }`}
+                              >
+                                {client.status === 'pending' ? '승인대기' :
+                                 client.status === 'active' ? '승인됨' :
+                                 client.status === 'suspended' ? '중지' : '만료'}
+                              </span>
+                            )}
                             <span
                               className={`px-2 py-0.5 text-xs rounded-full ${
                                 client.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
@@ -1985,6 +2094,34 @@ export default function AdminPage() {
                           >
                             <DollarSign className="w-5 h-5" />
                           </button>
+                          {/* OAuth 클라이언트 상태 관리 버튼 */}
+                          {client.auth_type === 'oauth' && client.status === 'pending' && (
+                            <button
+                              onClick={() => handleApprove(client)}
+                              className="p-2 text-neutral-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                              title="승인"
+                            >
+                              <UserCheck className="w-5 h-5" />
+                            </button>
+                          )}
+                          {client.auth_type === 'oauth' && client.status === 'active' && (
+                            <button
+                              onClick={() => handleSuspend(client)}
+                              className="p-2 text-neutral-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                              title="중지"
+                            >
+                              <Pause className="w-5 h-5" />
+                            </button>
+                          )}
+                          {client.auth_type === 'oauth' && client.status === 'suspended' && (
+                            <button
+                              onClick={() => handleActivate(client)}
+                              className="p-2 text-neutral-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="재활성화"
+                            >
+                              <Play className="w-5 h-5" />
+                            </button>
+                          )}
                           <button
                             onClick={() => openEditModal(client)}
                             className="p-2 text-neutral-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"

@@ -60,13 +60,18 @@ async function validateMetaToken(
 }
 
 // GET: 클라이언트 목록 조회
+// Query params: auth_type, status (필터링용)
 export async function GET(request: NextRequest) {
   if (!isAdmin(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
-    const { data: clients, error } = await supabaseAdmin
+    // 필터 파라미터
+    const authTypeFilter = request.nextUrl.searchParams.get('auth_type');
+    const statusFilter = request.nextUrl.searchParams.get('status');
+
+    let query = supabaseAdmin
       .from('clients')
       .select(`
         id,
@@ -79,6 +84,17 @@ export async function GET(request: NextRequest) {
         plan_type,
         is_active,
         auth_status,
+        auth_type,
+        status,
+        meta_user_id,
+        meta_user_name,
+        oauth_registered_at,
+        approved_at,
+        approved_by,
+        suspended_at,
+        suspension_reason,
+        contract_start_date,
+        contract_end_date,
         token_expires_at,
         service_start_date,
         service_end_date,
@@ -87,6 +103,16 @@ export async function GET(request: NextRequest) {
         updated_at
       `)
       .order('created_at', { ascending: false });
+
+    // 필터 적용
+    if (authTypeFilter && authTypeFilter !== 'all') {
+      query = query.eq('auth_type', authTypeFilter);
+    }
+    if (statusFilter && statusFilter !== 'all') {
+      query = query.eq('status', statusFilter);
+    }
+
+    const { data: clients, error } = await query;
 
     if (error) {
       console.error('Error fetching clients:', error);
@@ -128,11 +154,24 @@ export async function GET(request: NextRequest) {
       })
     );
 
+    // OAuth 하이브리드 통계
+    const stats = {
+      total: clientsWithStats.length,
+      activeCount: clientsWithStats.filter((c: any) => c.is_active).length,
+      // auth_type별 통계
+      manualCount: clientsWithStats.filter((c: any) => c.auth_type === 'manual').length,
+      oauthCount: clientsWithStats.filter((c: any) => c.auth_type === 'oauth').length,
+      // status별 통계
+      pendingCount: clientsWithStats.filter((c: any) => c.status === 'pending').length,
+      activeStatusCount: clientsWithStats.filter((c: any) => c.status === 'active').length,
+      suspendedCount: clientsWithStats.filter((c: any) => c.status === 'suspended').length,
+      expiredCount: clientsWithStats.filter((c: any) => c.status === 'expired').length
+    };
+
     return NextResponse.json({
       success: true,
       clients: clientsWithStats,
-      total: clientsWithStats.length,
-      activeCount: clientsWithStats.filter((c) => c.is_active).length,
+      ...stats
     });
   } catch (error: any) {
     console.error('Unexpected error:', error);
