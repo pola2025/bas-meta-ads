@@ -274,10 +274,12 @@ async function main() {
   console.log('');
 
   // 1. 활성 클라이언트 조회
+  // ⭐ OAuth 하이브리드 지원: manual 또는 (oauth AND status=active)
   const { data: clients, error: clientError } = await supabase
     .from('clients')
-    .select('id, client_name, meta_ad_account_id, encrypted_access_token, meta_access_token_id')
+    .select('id, client_name, meta_ad_account_id, encrypted_access_token, meta_access_token_id, auth_type, status')
     .eq('is_active', true)
+    .or('auth_type.eq.manual,and(auth_type.eq.oauth,status.eq.active)')
     .order('client_name');
 
   if (clientError) {

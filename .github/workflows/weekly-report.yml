@@ -36,10 +36,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Sync daily_aggregates
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: node sync-daily-aggregates.js
+
       - name: Send weekly report
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ADMIN_CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
