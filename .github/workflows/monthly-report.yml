@@ -39,10 +39,80 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Sync daily_aggregates (전월)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          # 전월 날짜 계산 (월간 리포트는 전월 데이터)
+          if [ -n "${{ github.event.inputs.report_month }}" ]; then
+            YEAR=$(echo "${{ github.event.inputs.report_month }}" | cut -d'-' -f1)
+            MONTH=$(echo "${{ github.event.inputs.report_month }}" | cut -d'-' -f2)
+          else
+            # 기본: 전월
+            YEAR=$(date -d "last month" +%Y)
+            MONTH=$(date -d "last month" +%m)
+          fi
+          START_DATE="${YEAR}-${MONTH}-01"
+          END_DATE=$(date -d "${YEAR}-${MONTH}-01 +1 month -1 day" +%Y-%m-%d)
+          echo "📊 동기화 기간: $START_DATE ~ $END_DATE"
+
+          # sync-monthly.js 생성 및 실행
+          cat > /tmp/sync-monthly.js << 'EOF'
+          require('dotenv').config();
+          const { Pool } = require('pg');
+          const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+
+          async function sync(startDate, endDate) {
+            console.log(`동기화: ${startDate} ~ ${endDate}`);
+            const { rows: clients } = await pool.query(`SELECT id, client_name FROM clients WHERE is_active = true`);
+
+            for (const client of clients) {
+              const { rows: rawData } = await pool.query(
+                `SELECT * FROM raw_data WHERE client_id = $1 AND date >= $2 AND date <= $3`,
+                [client.id, startDate, endDate]
+              );
+              if (!rawData.length) continue;
+
+              const aggregates = {};
+              rawData.forEach(row => {
+                const dateStr = typeof row.date === 'string' ? row.date.split('T')[0] : new Date(row.date.getTime() + 9*60*60*1000).toISOString().split('T')[0];
+                const key = `${dateStr}_${row.ad_id}`;
+                if (!aggregates[key]) {
+                  aggregates[key] = { client_id: client.id, date: dateStr, ad_id: row.ad_id, ad_name: row.ad_name, campaign_id: row.campaign_id, campaign_name: row.campaign_name, impressions: 0, reach: 0, clicks: 0, leads: 0, spend: 0, video_views: 0, video_p25_watched: 0, video_p50_watched: 0, video_p75_watched: 0, video_p100_watched: 0 };
+                }
+                aggregates[key].impressions += row.impressions || 0;
+                aggregates[key].reach += row.reach || 0;
+                aggregates[key].clicks += row.clicks || 0;
+                aggregates[key].leads += row.leads || 0;
+                aggregates[key].spend += parseFloat(row.spend) || 0;
+                aggregates[key].video_views += row.video_views || 0;
+                aggregates[key].video_p25_watched += row.video_p25_watched || 0;
+                aggregates[key].video_p50_watched += row.video_p50_watched || 0;
+                aggregates[key].video_p75_watched += row.video_p75_watched || 0;
+                aggregates[key].video_p100_watched += row.video_p100_watched || 0;
+              });
+
+              await pool.query(`DELETE FROM daily_aggregates WHERE client_id = $1 AND date >= $2 AND date <= $3`, [client.id, startDate, endDate]);
+              for (const r of Object.values(aggregates)) {
+                await pool.query(`INSERT INTO daily_aggregates (client_id, date, ad_id, ad_name, campaign_id, campaign_name, impressions, reach, clicks, leads, spend, video_views, video_p25_watched, video_p50_watched, video_p75_watched, video_p100_watched) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+                  [r.client_id, r.date, r.ad_id, r.ad_name, r.campaign_id, r.campaign_name, r.impressions, r.reach, r.clicks, r.leads, r.spend, r.video_views, r.video_p25_watched, r.video_p50_watched, r.video_p75_watched, r.video_p100_watched]);
+              }
+              console.log(`  ${client.client_name}: ${Object.keys(aggregates).length}건`);
+            }
+            await pool.end();
+          }
+
+          const [,, start, end] = process.argv;
+          sync(start, end).catch(console.error);
+          EOF
+
+          node /tmp/sync-monthly.js "$START_DATE" "$END_DATE"
+
       - name: Send monthly report
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ADMIN_CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
