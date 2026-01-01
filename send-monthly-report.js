@@ -666,7 +666,12 @@ async function generateAndSendReport(client, dates, forceResend = false) {
       adPerformance,
       campaignPerformance
     });
+    // AI 인사이트 생성 실패 감지
+    if (aiInsights && aiInsights.startsWith('⚠️')) {
+      console.warn(`⚠️ ${clientName}: AI 인사이트 생성 실패 - ${aiInsights}`);
+    }
   } else {
+    console.warn(`⚠️ ${clientName}: AI 인사이트 비활성화 (SKIP_AI=true)`);
     aiInsights = '📊 AI 인사이트가 비활성화되었습니다.';
   }
 
