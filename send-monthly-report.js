@@ -249,7 +249,7 @@ function getAdPerformance(monthData) {
 
   return Object.values(adStats).map(ad => ({
     ...ad,
-    cpl: ad.leads > 0 ? ad.spend / ad.leads : 999999,
+    cpl: ad.leads > 0 ? ad.spend / ad.leads : null,
     ctr: ad.impressions > 0 ? (ad.clicks / ad.impressions) * 100 : 0,
     spendPercent: total.spend > 0 ? (ad.spend / total.spend) * 100 : 0,
     leadPercent: total.leads > 0 ? (ad.leads / total.leads) * 100 : 0
@@ -284,7 +284,7 @@ function getCampaignPerformance(monthData) {
 
   return Object.values(campaignStats).map(camp => ({
     ...camp,
-    cpl: camp.leads > 0 ? camp.spend / camp.leads : 999999,
+    cpl: camp.leads > 0 ? camp.spend / camp.leads : null,
     spendPercent: total.spend > 0 ? (camp.spend / total.spend) * 100 : 0,
     leadPercent: total.leads > 0 ? (camp.leads / total.leads) * 100 : 0
   }));
@@ -316,7 +316,7 @@ ${reportData.weekStats.map(w =>
 
 ### 광고별 성과 (TOP 5)
 ${reportData.adPerformance.slice(0, 5).map((ad, idx) =>
-  `${idx + 1}. ${ad.ad_name}: 리드 ${ad.leads}건, CPL $${ad.cpl.toFixed(2)}, CTR ${ad.ctr.toFixed(2)}%, 지출 비중 ${ad.spendPercent.toFixed(1)}%`
+  `${idx + 1}. ${ad.ad_name}: 리드 ${ad.leads}건, CPL ${ad.cpl !== null ? '$' + ad.cpl.toFixed(2) : '-'}, CTR ${ad.ctr.toFixed(2)}%, 지출 비중 ${ad.spendPercent.toFixed(1)}%`
 ).join('\n')}
 
 ### 캠페인별 성과
@@ -495,7 +495,7 @@ function generateTelegramMessages(dates, thisStats, prevStats, weekStats, dayOfW
     msg3 += `${idx + 1}\\. *${escapeMd(ad.ad_name)}*\n`;
     msg3 += `   💰 지출: $${escapeMd(ad.spend.toFixed(2))} \\(${escapeMd(ad.spendPercent.toFixed(1))}%\\)\n`;
     msg3 += `   🎯 리드: ${ad.leads}건 \\(${escapeMd(ad.leadPercent.toFixed(1))}%\\)\n`;
-    msg3 += `   💵 CPL: $${escapeMd(ad.cpl.toFixed(2))}\n`;
+    msg3 += `   💵 CPL: ${ad.cpl !== null ? '$' + escapeMd(ad.cpl.toFixed(2)) : '\\-'}\n`;
     msg3 += `   📊 CTR: ${escapeMd(ad.ctr.toFixed(2))}%\n`;
     msg3 += `   ${escapeMd(efficiency)}\n\n`;
   });
@@ -509,7 +509,7 @@ function generateTelegramMessages(dates, thisStats, prevStats, weekStats, dayOfW
     msg3 += `*${escapeMd(camp.campaign_name)}*\n`;
     msg3 += `• 지출: $${escapeMd(camp.spend.toFixed(2))} \\(${escapeMd(camp.spendPercent.toFixed(1))}%\\)\n`;
     msg3 += `• 리드: ${camp.leads}건 \\(${escapeMd(camp.leadPercent.toFixed(1))}%\\)\n`;
-    msg3 += `• CPL: $${escapeMd(camp.cpl.toFixed(2))}\n`;
+    msg3 += `• CPL: ${camp.cpl !== null ? '$' + escapeMd(camp.cpl.toFixed(2)) : '\\-'}\n`;
     msg3 += `• 평가: ${escapeMd(efficiency)}\n\n`;
   });
 
