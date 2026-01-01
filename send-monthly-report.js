@@ -386,179 +386,70 @@ function getEfficiencyLabel(leadPercent, spendPercent, threshold = 5) {
   return '📊 보통';
 }
 
-// 텔레그램 메시지 생성 (4개로 분할)
+// 텔레그램 메시지 생성 (간소화: 1개 메시지)
 function generateTelegramMessages(dates, thisStats, prevStats, weekStats, dayOfWeekStats, adPerformance, campaignPerformance, aiInsights, clientInfo = { name: '클라이언트', slug: '', id: '' }) {
   const messages = [];
 
-  // 메시지 1: 헤더 & 월간 핵심 성과
-  let msg1 = `🤖 *Polarad AI 월간 성과 리포트*\n`;
-  msg1 += `${escapeMd(clientInfo.name)}\n`;
-  msg1 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg1 += `📅 리포트 기간: ${escapeMd(dates.thisMonth.replace('-', '년 '))}월\n`;
-  msg1 += `📅 비교 기간: ${escapeMd(dates.prevMonth.replace('-', '년 '))}월\n\n`;
+  // 날짜 파싱 (예: "2024-11" → "2024년 11월")
+  const [year, month] = dates.thisMonth.split('-');
+  const monthLabel = `${year}년 ${parseInt(month)}월`;
 
-  msg1 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg1 += `📊 *월간 성과 요약*\n`;
-  msg1 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-  msg1 += `🎯 리드: ${thisStats.leads}건\n`;
-  msg1 += `💰 총 지출: $${escapeMd(thisStats.spend.toFixed(2))}\n`;
-  msg1 += `💵 평균 CPL: $${escapeMd(thisStats.cpl.toFixed(2))}\n`;
-  msg1 += `📈 CTR: ${escapeMd(thisStats.ctr.toFixed(2))}%\n`;
-  msg1 += `🔄 전환율: ${escapeMd(thisStats.conversion_rate.toFixed(2))}%\n\n`;
+  // 변화율 계산
+  const leadChangePercent = prevStats.leads > 0
+    ? ((thisStats.leads - prevStats.leads) / prevStats.leads * 100).toFixed(1)
+    : (thisStats.leads > 0 ? '+100' : '0');
 
-  msg1 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg1 += `📈 *전월 대비 변화*\n`;
-  msg1 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-  msg1 += `리드: ${prevStats.leads}건 → ${thisStats.leads}건 \\(${escapeMd(calculateChange(thisStats.leads, prevStats.leads))}\\)\n`;
-  msg1 += `지출: $${escapeMd(prevStats.spend.toFixed(2))} → $${escapeMd(thisStats.spend.toFixed(2))} \\(${escapeMd(calculateChange(thisStats.spend, prevStats.spend))}\\)\n`;
-  msg1 += `CPL: $${escapeMd(prevStats.cpl.toFixed(2))} → $${escapeMd(thisStats.cpl.toFixed(2))} \\(${escapeMd(calculateChange(thisStats.cpl, prevStats.cpl))}\\)\n`;
-  msg1 += `CTR: ${escapeMd(prevStats.ctr.toFixed(2))}% → ${escapeMd(thisStats.ctr.toFixed(2))}%\n`;
-  msg1 += `전환율: ${escapeMd(prevStats.conversion_rate.toFixed(2))}% → ${escapeMd(thisStats.conversion_rate.toFixed(2))}%\n\n`;
+  const cplChangePercent = prevStats.cpl > 0
+    ? ((thisStats.cpl - prevStats.cpl) / prevStats.cpl * 100).toFixed(1)
+    : '0';
 
-  // 핵심 요약 생성
-  const leadChange = thisStats.leads - prevStats.leads;
-  const spendChange = thisStats.spend - prevStats.spend;
-  const cplChange = thisStats.cpl - prevStats.cpl;
+  // 이모지 결정
+  const leadEmoji = thisStats.leads >= prevStats.leads ? '📈' : '📉';
+  const cplEmoji = thisStats.cpl <= prevStats.cpl ? '✅' : '⚠️';
 
-  msg1 += `💡 *핵심 요약*\n`;
-  if (leadChange >= 0 && spendChange <= 0) {
-    msg1 += `• 리드 \\+${leadChange}건 증가, 비용 절감 → 효율 개선\\!\n`;
-  } else if (leadChange >= 0) {
-    msg1 += `• 리드 \\+${leadChange}건 증가\n`;
+  // 한줄 요약 자동 생성
+  let summary = '';
+  const leadDiff = thisStats.leads - prevStats.leads;
+  const cplDiff = thisStats.cpl - prevStats.cpl;
+
+  if (leadDiff >= 0 && cplDiff <= 0) {
+    summary = `리드 증가 \\+ CPL 절감으로 효율 개선\\!`;
+  } else if (leadDiff >= 0) {
+    summary = `리드 ${leadDiff}건 증가, CPL 모니터링 필요`;
+  } else if (cplDiff <= 0) {
+    summary = `CPL 절감 달성, 리드 볼륨 확대 필요`;
   } else {
-    msg1 += `• 리드 \\-${Math.abs(leadChange)}건 감소 → 원인 분석 필요\n`;
+    summary = `성과 점검 및 최적화 필요`;
   }
 
-  if (cplChange < 0) {
-    msg1 += `• CPL ${Math.abs(cplChange).toFixed(0)}% 절감 → 비용 효율 향상\n`;
-  } else if (cplChange > 0) {
-    msg1 += `• CPL ${cplChange.toFixed(0)}% 증가 → 최적화 필요\n`;
-  }
+  // 단일 메시지 생성
+  let msg = `🤖 *Polarad AI 월간 성과 리포트*\n`;
+  msg += `${escapeMd(clientInfo.name)}\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `📅 ${escapeMd(monthLabel)} 성과\n\n`;
 
-  messages.push(msg1);
+  msg += `📊 *핵심 지표*\n`;
+  msg += `• 리드: ${thisStats.leads}건 \\(전월 대비 ${leadChangePercent > 0 ? '\\+' : ''}${escapeMd(leadChangePercent)}%\\)\n`;
+  msg += `• 총 지출: $${escapeMd(thisStats.spend.toFixed(2))}\n`;
+  msg += `• 평균 CPL: $${escapeMd(thisStats.cpl.toFixed(2))}\n`;
+  msg += `• CTR: ${escapeMd(thisStats.ctr.toFixed(2))}%\n\n`;
 
-  // 메시지 2: 주별 트렌드 & 요일별 패턴
-  let msg2 = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg2 += `📅 *주별 트렌드 \\(1주차\\~${weekStats.length}주차\\)*\n`;
-  msg2 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  msg += `📈 *전월 대비 변화*\n`;
+  msg += `• 리드: ${prevStats.leads}건 → ${thisStats.leads}건 ${leadEmoji}\n`;
+  msg += `• CPL: $${escapeMd(prevStats.cpl.toFixed(2))} → $${escapeMd(thisStats.cpl.toFixed(2))} ${cplEmoji}\n\n`;
 
-  // 주별 최대 리드 수 계산
-  const maxWeekLeads = Math.max(...weekStats.map(w => w.leads || 0));
+  msg += `💡 *한줄 요약*\n`;
+  msg += `${summary}\n\n`;
 
-  weekStats.forEach(w => {
-    const bar = generateEmojiBar(w.leads, maxWeekLeads, 10);
-    msg2 += `${w.week}주차 \\(${escapeMd(w.label)}\\)\n`;
-    msg2 += `${bar} ${w.leads}건\n`;
-    msg2 += `CPL: ${w.leads > 0 ? '$' + escapeMd(w.cpl.toFixed(2)) : '\\-'} │ 지출: $${escapeMd(w.spend.toFixed(2))}\n\n`;
-  });
-
-  msg2 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg2 += `📊 *요일별 성과 패턴*\n`;
-  msg2 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-
-  // 요일별 최대 리드 수 계산
-  const maxDayLeads = Math.max(...dayOfWeekStats.map(d => d.leads || 0));
-
-  // 요일 순서: 월~일
-  const orderedDays = [1, 2, 3, 4, 5, 6, 0]; // 월화수목금토일
-  orderedDays.forEach(idx => {
-    const d = dayOfWeekStats.find(s => s.name === ['일', '월', '화', '수', '목', '금', '토'][idx]);
-    if (d) {
-      const bar = generateEmojiBar(d.leads, maxDayLeads, 8);
-      msg2 += `${d.name}: ${String(d.leads).padStart(2, ' ')}건 \\(${escapeMd(d.percent.toFixed(1))}%\\) ${bar}\n`;
-    }
-  });
-
-  // 패턴 분석
-  const topDays = dayOfWeekStats
-    .filter(d => d.leads > 0)
-    .sort((a, b) => b.leads - a.leads)
-    .slice(0, 2)
-    .map(d => d.name);
-
-  if (topDays.length > 0) {
-    msg2 += `\n💡 패턴 분석: ${topDays.join('/')}요일 리드 집중\n`;
-  }
-
-  messages.push(msg2);
-
-  // 메시지 3: 광고 & 캠페인 성과
-  let msg3 = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg3 += `🏆 *TOP 5 광고 \\(CPL 기준\\)*\n`;
-  msg3 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-
-  const adsWithLeads = adPerformance.filter(ad => ad.leads > 0);
-  const topAds = adsWithLeads.sort((a, b) => a.cpl - b.cpl).slice(0, 5);
-
-  topAds.forEach((ad, idx) => {
-    const efficiency = getEfficiencyLabel(ad.leadPercent, ad.spendPercent);
-    msg3 += `${idx + 1}\\. *${escapeMd(ad.ad_name)}*\n`;
-    msg3 += `   💰 지출: $${escapeMd(ad.spend.toFixed(2))} \\(${escapeMd(ad.spendPercent.toFixed(1))}%\\)\n`;
-    msg3 += `   🎯 리드: ${ad.leads}건 \\(${escapeMd(ad.leadPercent.toFixed(1))}%\\)\n`;
-    msg3 += `   💵 CPL: ${ad.cpl !== null ? '$' + escapeMd(ad.cpl.toFixed(2)) : '\\-'}\n`;
-    msg3 += `   📊 CTR: ${escapeMd(ad.ctr.toFixed(2))}%\n`;
-    msg3 += `   ${escapeMd(efficiency)}\n\n`;
-  });
-
-  msg3 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg3 += `💰 *캠페인별 예산 효율성*\n`;
-  msg3 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-
-  campaignPerformance.forEach(camp => {
-    const efficiency = getEfficiencyLabel(camp.leadPercent, camp.spendPercent, 10);
-    msg3 += `*${escapeMd(camp.campaign_name)}*\n`;
-    msg3 += `• 지출: $${escapeMd(camp.spend.toFixed(2))} \\(${escapeMd(camp.spendPercent.toFixed(1))}%\\)\n`;
-    msg3 += `• 리드: ${camp.leads}건 \\(${escapeMd(camp.leadPercent.toFixed(1))}%\\)\n`;
-    msg3 += `• CPL: ${camp.cpl !== null ? '$' + escapeMd(camp.cpl.toFixed(2)) : '\\-'}\n`;
-    msg3 += `• 평가: ${escapeMd(efficiency)}\n\n`;
-  });
-
-  // 예산 재배분 제안
-  if (campaignPerformance.length >= 2) {
-    const sortedByEfficiency = [...campaignPerformance].sort(
-      (a, b) => (b.leadPercent - b.spendPercent) - (a.leadPercent - a.spendPercent)
-    );
-    const bestCamp = sortedByEfficiency[0];
-    const worstCamp = sortedByEfficiency[sortedByEfficiency.length - 1];
-
-    if (bestCamp && worstCamp && bestCamp !== worstCamp) {
-      msg3 += `💡 *예산 재배분 제안*\n`;
-      msg3 += `• ${escapeMd(bestCamp.campaign_name)} 예산 \\+15% \\(고효율\\)\n`;
-      msg3 += `• ${escapeMd(worstCamp.campaign_name)} 소재 A/B 테스트 권장\n`;
-    }
-  }
-
-  messages.push(msg3);
-
-  // 메시지 4: AI 인사이트 & 푸터
-  let msg4 = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg4 += `🤖 *Polarad AI 월간 인사이트*\n`;
-  msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-
-  if (aiInsights) {
-    msg4 += escapeMd(aiInsights);
-    msg4 += `\n\n`;
-  }
-
-  msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg4 += `📊 *상세 대시보드*\n`;
-  msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-  msg4 += `더 자세한 데이터는 대시보드에서 확인하세요\\.\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `📊 *상세 리포트 보기*\n`;
   const reportUrl = `${DASHBOARD_URL}/reports?client=${clientInfo.slug || clientInfo.id}`;
-  msg4 += `🔗 ${escapeMd(reportUrl)}\n\n`;
-  msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg4 += `📞 *문의하기*\n`;
-  msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-  msg4 += `리포트 관련 문의가 필요하시면 언제든 연락주세요\\.\n\n`;
-  msg4 += `📧 이메일: mkt@polarad\\.co\\.kr\n\n`;
-  msg4 += `🕐 *운영시간*\n`;
-  msg4 += `평일 09:00 \\~ 18:00\n`;
-  msg4 += `주말 휴무 \\(공휴일 포함\\)\n\n`;
-  msg4 += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg4 += `🤖 Powered by Polarad AI\n`;
-  msg4 += `자동 생성 리포트 \\| 매월 1일 오전 9시 발송\n`;
+  msg += `👉 ${escapeMd(reportUrl)}\n\n`;
 
-  messages.push(msg4);
+  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `🤖 Powered by Polarad AI\n`;
+
+  messages.push(msg);
 
   return messages;
 }
