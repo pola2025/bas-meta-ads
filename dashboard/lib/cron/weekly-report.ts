@@ -268,9 +268,9 @@ async function sendClientReport(
   supabase: SupabaseClient,
   client: Client,
   dates: ReturnType<typeof getWeekDates>,
-  options: { force?: boolean; dryRun?: boolean; skipAI?: boolean }
+  options: { force?: boolean; dryRun?: boolean }
 ): Promise<ReportResult> {
-  const { force = false, dryRun = false, skipAI = false } = options;
+  const { force = false, dryRun = false } = options;
 
   console.log(`\n📊 ${client.client_name} 리포트 처리 중...`);
 
@@ -312,11 +312,8 @@ async function sendClientReport(
 
   console.log(`✅ 데이터: 리드 ${thisStats.leads}건, 지출 $${thisStats.spend.toFixed(2)}`);
 
-  // AI 인사이트 (옵션)
-  let aiInsights: string | null = null;
-  if (!skipAI) {
-    aiInsights = await generateAIInsights(thisStats, lastStats);
-  }
+  // AI 인사이트 생성
+  const aiInsights = await generateAIInsights(thisStats, lastStats);
 
   // 메시지 생성
   const reportUrl = `${DASHBOARD_URL}/reports?client=${client.slug}`;
@@ -359,7 +356,6 @@ export async function sendWeeklyReports(options: {
   clientName?: string;
   force?: boolean;
   dryRun?: boolean;
-  skipAI?: boolean;
 } = {}): Promise<{
   success: boolean;
   results: ReportResult[];

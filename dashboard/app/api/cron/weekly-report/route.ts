@@ -34,7 +34,6 @@ export async function GET(request: NextRequest) {
     const clientName = searchParams.get('client') || undefined;
     const force = searchParams.get('force') === 'true';
     const dryRun = searchParams.get('dry_run') === 'true';
-    const skipAI = searchParams.get('skip_ai') === 'true';
 
     console.log('🚀 주간 리포트 발송 시작');
     if (clientName) console.log(`   대상: ${clientName}`);
@@ -44,8 +43,7 @@ export async function GET(request: NextRequest) {
     const result = await sendWeeklyReports({
       clientName,
       force,
-      dryRun,
-      skipAI
+      dryRun
     });
 
     const duration = Date.now() - startTime;
